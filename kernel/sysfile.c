@@ -491,7 +491,7 @@ sys_exec(void)
   return ret;
 
  bad:
-  for(i = 0; i < NELEM(argv) && argv[i] != 0;)
+  for(i = 0; i < NELEM(argv) && argv[i] != 0; i++)
     kfree(argv[i]);
   return -1;
 }
