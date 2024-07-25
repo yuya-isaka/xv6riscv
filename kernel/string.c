@@ -1,5 +1,6 @@
 #include "types.h"
 
+// メモリ領域を特定の値で埋める
 void*
 memset(void *dst, int c, uint n)
 {
@@ -11,6 +12,7 @@ memset(void *dst, int c, uint n)
   return dst;
 }
 
+// メモリ領域の内容を比較する
 int
 memcmp(const void *v1, const void *v2, uint n)
 {
@@ -27,6 +29,7 @@ memcmp(const void *v1, const void *v2, uint n)
   return 0;
 }
 
+// メモリ領域の内容を移動する
 void*
 memmove(void *dst, const void *src, uint n)
 {
@@ -35,7 +38,7 @@ memmove(void *dst, const void *src, uint n)
 
   if(n == 0)
     return dst;
-  
+
   s = src;
   d = dst;
   if(s < d && s + n > d){
@@ -50,13 +53,14 @@ memmove(void *dst, const void *src, uint n)
   return dst;
 }
 
-// memcpy exists to placate GCC.  Use memmove.
+// memcpyはGCCを満足させるために存在する。memmoveを使用する。
 void*
 memcpy(void *dst, const void *src, uint n)
 {
   return memmove(dst, src, n);
 }
 
+// 文字列を比較する
 int
 strncmp(const char *p, const char *q, uint n)
 {
@@ -67,6 +71,7 @@ strncmp(const char *p, const char *q, uint n)
   return (uchar)*p - (uchar)*q;
 }
 
+// 文字列をコピーする
 char*
 strncpy(char *s, const char *t, int n)
 {
@@ -80,7 +85,7 @@ strncpy(char *s, const char *t, int n)
   return os;
 }
 
-// Like strncpy but guaranteed to NUL-terminate.
+// strncpyのようだが、NUL終端を保証する
 char*
 safestrcpy(char *s, const char *t, int n)
 {
@@ -95,6 +100,7 @@ safestrcpy(char *s, const char *t, int n)
   return os;
 }
 
+// 文字列の長さを返す
 int
 strlen(const char *s)
 {
@@ -104,4 +110,3 @@ strlen(const char *s)
     ;
   return n;
 }
-

@@ -1,10 +1,9 @@
-// Long-term locks for processes
+// プロセス用の長期ロック
 struct sleeplock {
-  uint locked;       // Is the lock held?
-  struct spinlock lk; // spinlock protecting this sleep lock
-  
-  // For debugging:
-  char *name;        // Name of lock.
-  int pid;           // Process holding lock
-};
+  uint locked;        // ロックが保持されているかどうか
+  struct spinlock lk; // このスリープロックを保護するスピンロック
 
+  // デバッグ用:
+  char *name;         // ロックの名前
+  int pid;            // ロックを保持しているプロセスID
+};

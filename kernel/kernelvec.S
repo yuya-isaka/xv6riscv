@@ -1,19 +1,18 @@
-        #
-        # interrupts and exceptions while in supervisor
-        # mode come here.
-        #
-        # the current stack is a kernel stack.
-        # push registers, call kerneltrap().
-        # when kerneltrap() returns, restore registers, return.
-        #
+#
+# スーパーバイザーモード中の割り込みと例外はここに来る。
+#
+# 現在のスタックはカーネルスタックである。
+# レジスタをプッシュし、kerneltrap()を呼び出す。
+# kerneltrap()が戻ったら、レジスタを復元し、リターンする。
+#
 .globl kerneltrap
 .globl kernelvec
 .align 4
 kernelvec:
-        # make room to save registers.
+        # レジスタを保存するための領域を確保する。
         addi sp, sp, -256
 
-        # save caller-saved registers.
+        # 呼び出し元保存レジスタを保存する。
         sd ra, 0(sp)
         sd sp, 8(sp)
         sd gp, 16(sp)
@@ -34,14 +33,14 @@ kernelvec:
         sd t5, 232(sp)
         sd t6, 240(sp)
 
-        # call the C trap handler in trap.c
+        # trap.cのCトラップハンドラを呼び出す。
         call kerneltrap
 
-        # restore registers.
+        # レジスタを復元する。
         ld ra, 0(sp)
         ld sp, 8(sp)
         ld gp, 16(sp)
-        # not tp (contains hartid), in case we moved CPUs
+        # tpは復元しない（hartidが含まれている）、CPUを移動した場合に備えて
         ld t0, 32(sp)
         ld t1, 40(sp)
         ld t2, 48(sp)
@@ -60,5 +59,5 @@ kernelvec:
 
         addi sp, sp, 256
 
-        # return to whatever we were doing in the kernel.
+        # カーネルで実行していたものに戻る。
         sret

@@ -1,42 +1,42 @@
-// Format of an ELF executable file
+// ELF実行ファイルのフォーマットである。
 
-#define ELF_MAGIC 0x464C457FU  // "\x7FELF" in little endian
+#define ELF_MAGIC 0x464C457FU  // リトルエンディアンで"\x7FELF"
 
-// File header
+// ファイルヘッダ
 struct elfhdr {
-  uint magic;  // must equal ELF_MAGIC
+  uint magic;  // ELF_MAGICと一致する必要がある。
   uchar elf[12];
   ushort type;
   ushort machine;
   uint version;
-  uint64 entry;
-  uint64 phoff;
-  uint64 shoff;
+  uint64 entry;    // プログラムエントリーポイントアドレス。
+  uint64 phoff;    // プログラムヘッダテーブルのファイルオフセット。
+  uint64 shoff;    // セクションヘッダテーブルのファイルオフセット。
   uint flags;
-  ushort ehsize;
-  ushort phentsize;
-  ushort phnum;
-  ushort shentsize;
-  ushort shnum;
-  ushort shstrndx;
+  ushort ehsize;   // ELFヘッダのサイズ。
+  ushort phentsize;// プログラムヘッダエントリのサイズ。
+  ushort phnum;    // プログラムヘッダエントリの数。
+  ushort shentsize;// セクションヘッダエントリのサイズ。
+  ushort shnum;    // セクションヘッダエントリの数。
+  ushort shstrndx; // セクションヘッダ文字列テーブルインデックス。
 };
 
-// Program section header
+// プログラムセクションヘッダ
 struct proghdr {
-  uint32 type;
-  uint32 flags;
-  uint64 off;
-  uint64 vaddr;
-  uint64 paddr;
-  uint64 filesz;
-  uint64 memsz;
-  uint64 align;
+  uint32 type;     // セクションの種類。
+  uint32 flags;    // セクションのフラグ。
+  uint64 off;      // セクションのファイルオフセット。
+  uint64 vaddr;    // セクションの仮想アドレス。
+  uint64 paddr;    // セクションの物理アドレス。
+  uint64 filesz;   // セクションのファイルサイズ。
+  uint64 memsz;    // セクションのメモリサイズ。
+  uint64 align;    // セクションのアライメント。
 };
 
-// Values for Proghdr type
-#define ELF_PROG_LOAD           1
+// Proghdrのtypeフィールドの値
+#define ELF_PROG_LOAD           1   // セクションがロード可能であることを示す。
 
-// Flag bits for Proghdr flags
-#define ELF_PROG_FLAG_EXEC      1
-#define ELF_PROG_FLAG_WRITE     2
-#define ELF_PROG_FLAG_READ      4
+// Proghdrのflagsフィールドのフラグビット
+#define ELF_PROG_FLAG_EXEC      1   // セクションが実行可能であることを示す。
+#define ELF_PROG_FLAG_WRITE     2   // セクションが書き込み可能であることを示す。
+#define ELF_PROG_FLAG_READ      4   // セクションが読み取り可能であることを示す。

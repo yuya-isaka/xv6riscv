@@ -1,5 +1,5 @@
-#define O_RDONLY  0x000
-#define O_WRONLY  0x001
-#define O_RDWR    0x002
-#define O_CREATE  0x200
-#define O_TRUNC   0x400
+#define O_RDONLY  0x000   // ファイルを読み取り専用で開くフラグである。
+#define O_WRONLY  0x001   // ファイルを書き込み専用で開くフラグである。
+#define O_RDWR    0x002   // ファイルを読み書き両用で開くフラグである。
+#define O_CREATE  0x200   // ファイルが存在しない場合、新しく作成するフラグである。
+#define O_TRUNC   0x400   // ファイルを開く際に、既存の内容を切り捨てるフラグである。

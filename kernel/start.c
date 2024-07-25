@@ -7,60 +7,59 @@
 void main();
 void timerinit();
 
-// entry.S needs one stack per CPU.
+// entry.S が各CPU用に必要とするスタック
 __attribute__ ((aligned (16))) char stack0[4096 * NCPU];
 
-// entry.S jumps here in machine mode on stack0.
+// entry.S がmachineモードで stack0 上にジャンプする
 void
 start()
 {
-  // set M Previous Privilege mode to Supervisor, for mret.
+  // M 前の特権モードを Supervisor に設定するために mret を使用
   unsigned long x = r_mstatus();
   x &= ~MSTATUS_MPP_MASK;
   x |= MSTATUS_MPP_S;
   w_mstatus(x);
 
-  // set M Exception Program Counter to main, for mret.
-  // requires gcc -mcmodel=medany
+  // M 例外プログラムカウンタを main に設定するために mret を使用
+  // gcc -mcmodel=medany を要求する
   w_mepc((uint64)main);
 
-  // disable paging for now.
+  // 現在のところ、ページングを無効にする
   w_satp(0);
 
-  // delegate all interrupts and exceptions to supervisor mode.
+  // すべての割り込みと例外を Supervisor モードに委譲する
   w_medeleg(0xffff);
   w_mideleg(0xffff);
   w_sie(r_sie() | SIE_SEIE | SIE_STIE | SIE_SSIE);
 
-  // configure Physical Memory Protection to give supervisor mode
-  // access to all of physical memory.
+  // 物理メモリ保護を設定し、Supervisor モードにすべての物理メモリへのアクセスを許可する
   w_pmpaddr0(0x3fffffffffffffull);
   w_pmpcfg0(0xf);
 
-  // ask for clock interrupts.
+  // クロック割り込みを要求する
   timerinit();
 
-  // keep each CPU's hartid in its tp register, for cpuid().
+  // 各CPUの hartid を tp レジスタに保存し、 cpuid() のために使用
   int id = r_mhartid();
   w_tp(id);
 
-  // switch to supervisor mode and jump to main().
+  // Supervisor モードに切り替え、 main() にジャンプする
   asm volatile("mret");
 }
 
-// ask each hart to generate timer interrupts.
+// 各 hart にタイマー割り込みを生成するよう要求する
 void
 timerinit()
 {
-  // enable supervisor-mode timer interrupts.
+  // Supervisor モードのタイマー割り込みを有効にする
   w_mie(r_mie() | MIE_STIE);
-  
-  // enable the sstc extension (i.e. stimecmp).
-  w_menvcfg(r_menvcfg() | (1L << 63)); 
-  
-  // allow supervisor to use stimecmp and time.
+
+  // sstc 拡張 (例えば stimecmp) を有効にする
+  w_menvcfg(r_menvcfg() | (1L << 63));
+
+  // Supervisor に stimecmp と time の使用を許可する
   w_mcounteren(r_mcounteren() | 2);
-  
-  // ask for the very first timer interrupt.
+
+  // 最初のタイマー割り込みを要求する
   w_stimecmp(r_time() + 1000000);
 }

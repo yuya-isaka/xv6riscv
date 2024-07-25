@@ -1,4 +1,4 @@
-// Mutual exclusion spin locks.
+// ミューテックススピンロック。
 
 #include "types.h"
 #include "param.h"
@@ -8,6 +8,7 @@
 #include "proc.h"
 #include "defs.h"
 
+// スピンロックの初期化
 void
 initlock(struct spinlock *lk, char *name)
 {
@@ -16,33 +17,33 @@ initlock(struct spinlock *lk, char *name)
   lk->cpu = 0;
 }
 
-// Acquire the lock.
-// Loops (spins) until the lock is acquired.
+// ロックを取得する。
+// ロックが取得されるまでループ（スピン）する。
 void
 acquire(struct spinlock *lk)
 {
-  push_off(); // disable interrupts to avoid deadlock.
+  push_off(); // デッドロックを避けるために割り込みを無効化
   if(holding(lk))
     panic("acquire");
 
-  // On RISC-V, sync_lock_test_and_set turns into an atomic swap:
+  // RISC-Vでは、sync_lock_test_and_setはアトミックスワップに変換される:
   //   a5 = 1
   //   s1 = &lk->locked
   //   amoswap.w.aq a5, a5, (s1)
   while(__sync_lock_test_and_set(&lk->locked, 1) != 0)
     ;
 
-  // Tell the C compiler and the processor to not move loads or stores
-  // past this point, to ensure that the critical section's memory
-  // references happen strictly after the lock is acquired.
-  // On RISC-V, this emits a fence instruction.
+  // このポイントを超えてロードやストアを移動しないように
+  // Cコンパイラおよびプロセッサに通知し、クリティカルセクションの
+  // メモリ参照がロック取得後に厳密に行われるようにする。
+  // RISC-Vでは、これによりフェンス命令が発行される。
   __sync_synchronize();
 
-  // Record info about lock acquisition for holding() and debugging.
+  // ロック取得に関する情報を記録する。holding()およびデバッグ用。
   lk->cpu = mycpu();
 }
 
-// Release the lock.
+// ロックを解放する。
 void
 release(struct spinlock *lk)
 {
@@ -51,19 +52,18 @@ release(struct spinlock *lk)
 
   lk->cpu = 0;
 
-  // Tell the C compiler and the CPU to not move loads or stores
-  // past this point, to ensure that all the stores in the critical
-  // section are visible to other CPUs before the lock is released,
-  // and that loads in the critical section occur strictly before
-  // the lock is released.
-  // On RISC-V, this emits a fence instruction.
+  // クリティカルセクション内のすべてのストアが他のCPUに対して
+  // ロックが解放される前に見えるようにし、かつ
+  // クリティカルセクション内のロードがロック解放前に厳密に行われるように
+  // CコンパイラおよびCPUに対してロードやストアをこのポイントを超えて
+  // 移動しないように通知する。
+  // RISC-Vでは、これによりフェンス命令が発行される。
   __sync_synchronize();
 
-  // Release the lock, equivalent to lk->locked = 0.
-  // This code doesn't use a C assignment, since the C standard
-  // implies that an assignment might be implemented with
-  // multiple store instructions.
-  // On RISC-V, sync_lock_release turns into an atomic swap:
+  // ロックを解放する。これはlk->locked = 0に相当する。
+  // このコードはCの代入文を使用しない。C標準は代入が
+  // 複数のストア命令で実装される可能性があると示唆しているため。
+  // RISC-Vでは、sync_lock_releaseはアトミックスワップに変換される:
   //   s1 = &lk->locked
   //   amoswap.w zero, zero, (s1)
   __sync_lock_release(&lk->locked);
@@ -71,8 +71,8 @@ release(struct spinlock *lk)
   pop_off();
 }
 
-// Check whether this cpu is holding the lock.
-// Interrupts must be off.
+// このCPUがロックを保持しているかどうかを確認する。
+// 割り込みは無効でなければならない。
 int
 holding(struct spinlock *lk)
 {
@@ -81,9 +81,9 @@ holding(struct spinlock *lk)
   return r;
 }
 
-// push_off/pop_off are like intr_off()/intr_on() except that they are matched:
-// it takes two pop_off()s to undo two push_off()s.  Also, if interrupts
-// are initially off, then push_off, pop_off leaves them off.
+// push_off/pop_offはintr_off()/intr_on()に似ているが、マッチングする:
+// 2つのpush_off()を行うには2つのpop_off()が必要である。
+// また、最初に割り込みが無効の場合、push_off、pop_offはそれを維持する。
 
 void
 push_off(void)

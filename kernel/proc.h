@@ -1,9 +1,9 @@
-// Saved registers for kernel context switches.
+// カーネルコンテキストスイッチ用に保存されるレジスタ
 struct context {
   uint64 ra;
   uint64 sp;
 
-  // callee-saved
+  // callee-saved（呼び出し側で保存されるレジスタ）
   uint64 s0;
   uint64 s1;
   uint64 s2;
@@ -18,34 +18,31 @@ struct context {
   uint64 s11;
 };
 
-// Per-CPU state.
+// 各CPUの状態を管理する構造体
 struct cpu {
-  struct proc *proc;          // The process running on this cpu, or null.
-  struct context context;     // swtch() here to enter scheduler().
-  int noff;                   // Depth of push_off() nesting.
-  int intena;                 // Were interrupts enabled before push_off()?
+  struct proc *proc;          // このCPU上で動作しているプロセス、またはnull
+  struct context context;     // スケジューラに入るためのswtch()用のコンテキスト
+  int noff;                   // push_off()のネスト深度
+  int intena;                 // push_off()前の割り込みの有効状態
 };
 
-extern struct cpu cpus[NCPU];
+extern struct cpu cpus[NCPU]; // 全CPUの状態を保持する配列
 
-// per-process data for the trap handling code in trampoline.S.
-// sits in a page by itself just under the trampoline page in the
-// user page table. not specially mapped in the kernel page table.
-// uservec in trampoline.S saves user registers in the trapframe,
-// then initializes registers from the trapframe's
-// kernel_sp, kernel_hartid, kernel_satp, and jumps to kernel_trap.
-// usertrapret() and userret in trampoline.S set up
-// the trapframe's kernel_*, restore user registers from the
-// trapframe, switch to the user page table, and enter user space.
-// the trapframe includes callee-saved user registers like s0-s11 because the
-// return-to-user path via usertrapret() doesn't return through
-// the entire kernel call stack.
+// トラップ処理用のプロセスごとのデータ。trampoline.S内のトラップ処理コード用。
+// ユーザページテーブル内のトランポリンページのすぐ下のページに配置。
+// カーネルページテーブルには特にマッピングされない。
+// trampoline.S内のuservecはユーザレジスタをtrapframeに保存し、
+// kernel_sp、kernel_hartid、kernel_satpからレジスタを初期化し、kernel_trapにジャンプする。
+// usertrapret()およびtrampoline.S内のuserretはtrapframeのkernel_*を設定し、
+// trapframeからユーザレジスタを復元し、ユーザページテーブルに切り替えてユーザ空間に入る。
+// trapframeにはs0-s11のようなcallee-savedのユーザレジスタが含まれている。
+// これはusertrapret()経由でユーザに戻る経路がカーネルコールスタック全体を経由しないため。
 struct trapframe {
-  /*   0 */ uint64 kernel_satp;   // kernel page table
-  /*   8 */ uint64 kernel_sp;     // top of process's kernel stack
-  /*  16 */ uint64 kernel_trap;   // usertrap()
-  /*  24 */ uint64 epc;           // saved user program counter
-  /*  32 */ uint64 kernel_hartid; // saved kernel tp
+  /*   0 */ uint64 kernel_satp;   // カーネルページテーブル
+  /*   8 */ uint64 kernel_sp;     // プロセスのカーネルスタックのトップ
+  /*  16 */ uint64 kernel_trap;   // usertrap()へのポインタ
+  /*  24 */ uint64 epc;           // 保存されたユーザプログラムカウンタ
+  /*  32 */ uint64 kernel_hartid; // 保存されたカーネルtp
   /*  40 */ uint64 ra;
   /*  48 */ uint64 sp;
   /*  56 */ uint64 gp;
@@ -79,29 +76,30 @@ struct trapframe {
   /* 280 */ uint64 t6;
 };
 
+// プロセスの状態を表す列挙型
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
-// Per-process state
+// 各プロセスの状態を管理する構造体
 struct proc {
-  struct spinlock lock;
+  struct spinlock lock;        // プロセス固有のロック
 
-  // p->lock must be held when using these:
-  enum procstate state;        // Process state
-  void *chan;                  // If non-zero, sleeping on chan
-  int killed;                  // If non-zero, have been killed
-  int xstate;                  // Exit status to be returned to parent's wait
-  int pid;                     // Process ID
+  // p->lockが保持されている間に使用されるべきフィールド：
+  enum procstate state;        // プロセスの状態
+  void *chan;                  // 非ゼロの場合、このチャネルでスリープ中
+  int killed;                  // 非ゼロの場合、killされている
+  int xstate;                  // 親のwaitのために返される終了ステータス
+  int pid;                     // プロセスID
 
-  // wait_lock must be held when using this:
-  struct proc *parent;         // Parent process
+  // wait_lockが保持されている間に使用されるべきフィールド：
+  struct proc *parent;         // 親プロセス
 
-  // these are private to the process, so p->lock need not be held.
-  uint64 kstack;               // Virtual address of kernel stack
-  uint64 sz;                   // Size of process memory (bytes)
-  pagetable_t pagetable;       // User page table
-  struct trapframe *trapframe; // data page for trampoline.S
-  struct context context;      // swtch() here to run process
-  struct file *ofile[NOFILE];  // Open files
-  struct inode *cwd;           // Current directory
-  char name[16];               // Process name (debugging)
+  // プロセスにプライベートなフィールドなので、p->lockを保持する必要はない：
+  uint64 kstack;               // カーネルスタックの仮想アドレス
+  uint64 sz;                   // プロセスメモリのサイズ（バイト単位）
+  pagetable_t pagetable;       // ユーザページテーブル
+  struct trapframe *trapframe; // trampoline.S用のデータページ
+  struct context context;      // プロセスを実行するためのswtch()用のコンテキスト
+  struct file *ofile[NOFILE];  // オープンファイル
+  struct inode *cwd;           // カレントディレクトリ
+  char name[16];               // プロセス名（デバッグ用）
 };

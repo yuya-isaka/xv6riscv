@@ -7,20 +7,20 @@
 #include "syscall.h"
 #include "defs.h"
 
-// Fetch the uint64 at addr from the current process.
+// 現在のプロセスから指定されたアドレスのuint64を取得する関数である。
 int
 fetchaddr(uint64 addr, uint64 *ip)
 {
   struct proc *p = myproc();
-  if(addr >= p->sz || addr+sizeof(uint64) > p->sz) // both tests needed, in case of overflow
+  if(addr >= p->sz || addr+sizeof(uint64) > p->sz) // 両方のテストが必要である、オーバーフローの可能性があるため。
     return -1;
-  if(copyin(p->pagetable, (char *)ip, addr, sizeof(*ip)) != 0)
+  if(copyin(p->pagetable, (char *)ip, addr, sizeof(*ip)) !=0)
     return -1;
   return 0;
 }
 
-// Fetch the nul-terminated string at addr from the current process.
-// Returns length of string, not including nul, or -1 for error.
+// 現在のプロセスから指定されたアドレスのnull終端文字列を取得する関数である。
+// 文字列の長さ（nullを含まない）を返す。エラーの場合は-1を返す。
 int
 fetchstr(uint64 addr, char *buf, int max)
 {
@@ -30,6 +30,7 @@ fetchstr(uint64 addr, char *buf, int max)
   return strlen(buf);
 }
 
+// 指定された引数番号の生の値を取得する関数である。
 static uint64
 argraw(int n)
 {
@@ -52,25 +53,25 @@ argraw(int n)
   return -1;
 }
 
-// Fetch the nth 32-bit system call argument.
+// 指定された引数番号の32ビットのシステムコール引数を取得する関数である。
 void
 argint(int n, int *ip)
 {
   *ip = argraw(n);
 }
 
-// Retrieve an argument as a pointer.
-// Doesn't check for legality, since
-// copyin/copyout will do that.
+// 引数をポインタとして取得する関数である。
+// 適法性のチェックは行わない。copyin/copyoutがそれを行うためである。
 void
 argaddr(int n, uint64 *ip)
 {
   *ip = argraw(n);
 }
 
-// Fetch the nth word-sized system call argument as a null-terminated string.
-// Copies into buf, at most max.
-// Returns string length if OK (including nul), -1 if error.
+// 指定された引数番号のワードサイズのシステムコール引数を
+// null終端文字列として取得する関数である。
+// bufにコピーし、最大maxまでである。
+// 成功した場合は文字列の長さ（nullを含む）を返し、エラーの場合は-1を返す。
 int
 argstr(int n, char *buf, int max)
 {
@@ -79,7 +80,7 @@ argstr(int n, char *buf, int max)
   return fetchstr(addr, buf, max);
 }
 
-// Prototypes for the functions that handle system calls.
+// システムコールを処理する関数のプロトタイプである。
 extern uint64 sys_fork(void);
 extern uint64 sys_exit(void);
 extern uint64 sys_wait(void);
@@ -102,8 +103,8 @@ extern uint64 sys_link(void);
 extern uint64 sys_mkdir(void);
 extern uint64 sys_close(void);
 
-// An array mapping syscall numbers from syscall.h
-// to the function that handles the system call.
+// syscall.hからのシステムコール番号を
+// システムコールを処理する関数にマッピングする配列である。
 static uint64 (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
 [SYS_exit]    sys_exit,
@@ -128,6 +129,7 @@ static uint64 (*syscalls[])(void) = {
 [SYS_close]   sys_close,
 };
 
+// システムコールを処理する関数である。
 void
 syscall(void)
 {
@@ -136,8 +138,8 @@ syscall(void)
 
   num = p->trapframe->a7;
   if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
-    // Use num to lookup the system call function for num, call it,
-    // and store its return value in p->trapframe->a0
+    // numを使用してシステムコール関数をlookupし、それを呼び出し、
+    // その戻り値をp->trapframe->a0に格納する。
     p->trapframe->a0 = syscalls[num]();
   } else {
     printf("%d %s: unknown sys call %d\n",

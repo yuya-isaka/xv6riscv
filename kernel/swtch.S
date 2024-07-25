@@ -1,12 +1,12 @@
 # Context switch
 #
 #   void swtch(struct context *old, struct context *new);
-# 
-# Save current registers in old. Load from new.	
-
+#
+# 現在のレジスタの状態を old に保存し、new からロードする。
 
 .globl swtch
 swtch:
+        # 現在のレジスタの値を old に保存する
         sd ra, 0(a0)
         sd sp, 8(a0)
         sd s0, 16(a0)
@@ -22,6 +22,7 @@ swtch:
         sd s10, 96(a0)
         sd s11, 104(a0)
 
+        # new からレジスタの値をロードする
         ld ra, 0(a1)
         ld sp, 8(a1)
         ld s0, 16(a1)
@@ -36,7 +37,5 @@ swtch:
         ld s9, 88(a1)
         ld s10, 96(a1)
         ld s11, 104(a1)
-        
-        ret
 
-	
+        ret

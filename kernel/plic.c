@@ -5,31 +5,33 @@
 #include "defs.h"
 
 //
-// the riscv Platform Level Interrupt Controller (PLIC).
+// RISC-V プラットフォームレベル割り込みコントローラ (PLIC).
 //
 
+// PLICの初期化
 void
 plicinit(void)
 {
-  // set desired IRQ priorities non-zero (otherwise disabled).
+  // 必要なIRQの優先度を非ゼロに設定する（ゼロの場合は無効）。
   *(uint32*)(PLIC + UART0_IRQ*4) = 1;
   *(uint32*)(PLIC + VIRTIO0_IRQ*4) = 1;
 }
 
+// 各ハート（CPUコア）用のPLICの初期化
 void
 plicinithart(void)
 {
   int hart = cpuid();
-  
-  // set enable bits for this hart's S-mode
-  // for the uart and virtio disk.
+
+  // このハートのSモード用の有効ビットを設定する
+  // UARTおよびVirtioディスクのため。
   *(uint32*)PLIC_SENABLE(hart) = (1 << UART0_IRQ) | (1 << VIRTIO0_IRQ);
 
-  // set this hart's S-mode priority threshold to 0.
+  // このハートのSモードの優先度閾値を0に設定する。
   *(uint32*)PLIC_SPRIORITY(hart) = 0;
 }
 
-// ask the PLIC what interrupt we should serve.
+// PLICにどの割り込みを処理するべきか尋ねる。
 int
 plic_claim(void)
 {
@@ -38,7 +40,7 @@ plic_claim(void)
   return irq;
 }
 
-// tell the PLIC we've served this IRQ.
+// PLICにこのIRQを処理したことを伝える。
 void
 plic_complete(int irq)
 {

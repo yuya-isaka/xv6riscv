@@ -8,17 +8,19 @@
 #include "sleeplock.h"
 #include "file.h"
 
-#define PIPESIZE 512
+#define PIPESIZE 512  // パイプのサイズ
 
+// パイプの構造体
 struct pipe {
-  struct spinlock lock;
-  char data[PIPESIZE];
-  uint nread;     // number of bytes read
-  uint nwrite;    // number of bytes written
-  int readopen;   // read fd is still open
-  int writeopen;  // write fd is still open
+  struct spinlock lock;  // スピンロック
+  char data[PIPESIZE];   // パイプデータ
+  uint nread;            // 読み取られたバイト数
+  uint nwrite;           // 書き込まれたバイト数
+  int readopen;          // 読み取りファイルディスクリプタが開いているか
+  int writeopen;         // 書き込みファイルディスクリプタが開いているか
 };
 
+// パイプのファイルディスクリプタを2つ割り当てる
 int
 pipealloc(struct file **f0, struct file **f1)
 {
@@ -55,6 +57,7 @@ pipealloc(struct file **f0, struct file **f1)
   return -1;
 }
 
+// パイプを閉じる
 void
 pipeclose(struct pipe *pi, int writable)
 {
@@ -73,6 +76,7 @@ pipeclose(struct pipe *pi, int writable)
     release(&pi->lock);
 }
 
+// パイプに書き込む
 int
 pipewrite(struct pipe *pi, uint64 addr, int n)
 {
@@ -85,7 +89,7 @@ pipewrite(struct pipe *pi, uint64 addr, int n)
       release(&pi->lock);
       return -1;
     }
-    if(pi->nwrite == pi->nread + PIPESIZE){ //DOC: pipewrite-full
+    if(pi->nwrite == pi->nread + PIPESIZE){ // パイプが満杯の場合
       wakeup(&pi->nread);
       sleep(&pi->nwrite, &pi->lock);
     } else {
@@ -102,6 +106,7 @@ pipewrite(struct pipe *pi, uint64 addr, int n)
   return i;
 }
 
+// パイプから読み取る
 int
 piperead(struct pipe *pi, uint64 addr, int n)
 {
@@ -110,21 +115,21 @@ piperead(struct pipe *pi, uint64 addr, int n)
   char ch;
 
   acquire(&pi->lock);
-  while(pi->nread == pi->nwrite && pi->writeopen){  //DOC: pipe-empty
+  while(pi->nread == pi->nwrite && pi->writeopen){  // パイプが空の場合
     if(killed(pr)){
       release(&pi->lock);
       return -1;
     }
-    sleep(&pi->nread, &pi->lock); //DOC: piperead-sleep
+    sleep(&pi->nread, &pi->lock); // 読み取り待ち
   }
-  for(i = 0; i < n; i++){  //DOC: piperead-copy
+  for(i = 0; i < n; i++){  // データの読み取り
     if(pi->nread == pi->nwrite)
       break;
     ch = pi->data[pi->nread++ % PIPESIZE];
     if(copyout(pr->pagetable, addr + i, &ch, 1) == -1)
       break;
   }
-  wakeup(&pi->nwrite);  //DOC: piperead-wakeup
+  wakeup(&pi->nwrite);  // 書き込み待ちのスレッドを起こす
   release(&pi->lock);
   return i;
 }

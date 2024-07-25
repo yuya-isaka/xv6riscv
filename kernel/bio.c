@@ -1,18 +1,16 @@
-// Buffer cache.
+// バッファキャッシュである。
 //
-// The buffer cache is a linked list of buf structures holding
-// cached copies of disk block contents.  Caching disk blocks
-// in memory reduces the number of disk reads and also provides
-// a synchronization point for disk blocks used by multiple processes.
+// バッファキャッシュは、ディスクブロック内容のキャッシュされたコピーを保持する
+// buf構造体のリンクリストである。メモリ内にディスクブロックをキャッシュすることで
+// ディスク読み取りの回数を減らし、複数のプロセスが使用するディスクブロックの
+// 同期ポイントも提供する。
 //
-// Interface:
-// * To get a buffer for a particular disk block, call bread.
-// * After changing buffer data, call bwrite to write it to disk.
-// * When done with the buffer, call brelse.
-// * Do not use the buffer after calling brelse.
-// * Only one process at a time can use a buffer,
-//     so do not keep them longer than necessary.
-
+// インターフェース:
+// * 特定のディスクブロックのバッファを取得するには、breadを呼び出す。
+// * バッファデータを変更した後、bwriteを呼び出してディスクに書き込む。
+// * バッファの使用が終わったら、brelseを呼び出す。
+// * brelseを呼び出した後はバッファを使用しない。
+// * 同時に一つのプロセスだけがバッファを使用できるため、必要以上に保持しない。
 
 #include "types.h"
 #include "param.h"
@@ -27,12 +25,13 @@ struct {
   struct spinlock lock;
   struct buf buf[NBUF];
 
-  // Linked list of all buffers, through prev/next.
-  // Sorted by how recently the buffer was used.
-  // head.next is most recent, head.prev is least.
+  // すべてのバッファのリンクリストである。
+  // 使用頻度順にソートされている。
+  // head.nextが最も最近使用されたバッファであり、head.prevが最も古いバッファである。
   struct buf head;
 } bcache;
 
+// バッファキャッシュを初期化する関数である。
 void
 binit(void)
 {
@@ -40,7 +39,7 @@ binit(void)
 
   initlock(&bcache.lock, "bcache");
 
-  // Create linked list of buffers
+  // バッファのリンクリストを作成する。
   bcache.head.prev = &bcache.head;
   bcache.head.next = &bcache.head;
   for(b = bcache.buf; b < bcache.buf+NBUF; b++){
@@ -52,9 +51,9 @@ binit(void)
   }
 }
 
-// Look through buffer cache for block on device dev.
-// If not found, allocate a buffer.
-// In either case, return locked buffer.
+// デバイスdev上のブロックをバッファキャッシュ内で検索する関数である。
+// 見つからなかった場合、バッファを割り当てる。
+// いずれの場合も、ロックされたバッファを返す。
 static struct buf*
 bget(uint dev, uint blockno)
 {
@@ -62,7 +61,7 @@ bget(uint dev, uint blockno)
 
   acquire(&bcache.lock);
 
-  // Is the block already cached?
+  // ブロックはすでにキャッシュされているか？
   for(b = bcache.head.next; b != &bcache.head; b = b->next){
     if(b->dev == dev && b->blockno == blockno){
       b->refcnt++;
@@ -72,8 +71,8 @@ bget(uint dev, uint blockno)
     }
   }
 
-  // Not cached.
-  // Recycle the least recently used (LRU) unused buffer.
+  // キャッシュされていない。
+  // 最も最近使われていない未使用のバッファをリサイクルする。
   for(b = bcache.head.prev; b != &bcache.head; b = b->prev){
     if(b->refcnt == 0) {
       b->dev = dev;
@@ -88,7 +87,7 @@ bget(uint dev, uint blockno)
   panic("bget: no buffers");
 }
 
-// Return a locked buf with the contents of the indicated block.
+// 指定されたブロックの内容を持つロックされたバッファを返す関数である。
 struct buf*
 bread(uint dev, uint blockno)
 {
@@ -102,7 +101,7 @@ bread(uint dev, uint blockno)
   return b;
 }
 
-// Write b's contents to disk.  Must be locked.
+// バッファの内容をディスクに書き込む関数である。ロックされている必要がある。
 void
 bwrite(struct buf *b)
 {
@@ -111,8 +110,8 @@ bwrite(struct buf *b)
   virtio_disk_rw(b, 1);
 }
 
-// Release a locked buffer.
-// Move to the head of the most-recently-used list.
+// ロックされたバッファを解放する関数である。
+// 最も最近使用されたリストの先頭に移動する。
 void
 brelse(struct buf *b)
 {
@@ -124,7 +123,7 @@ brelse(struct buf *b)
   acquire(&bcache.lock);
   b->refcnt--;
   if (b->refcnt == 0) {
-    // no one is waiting for it.
+    // 誰も待っていない。
     b->next->prev = b->prev;
     b->prev->next = b->next;
     b->next = bcache.head.next;
@@ -132,10 +131,11 @@ brelse(struct buf *b)
     bcache.head.next->prev = b;
     bcache.head.next = b;
   }
-  
+
   release(&bcache.lock);
 }
 
+// バッファの参照カウントを増加させる関数である。
 void
 bpin(struct buf *b) {
   acquire(&bcache.lock);
@@ -143,11 +143,10 @@ bpin(struct buf *b) {
   release(&bcache.lock);
 }
 
+// バッファの参照カウントを減少させる関数である。
 void
 bunpin(struct buf *b) {
   acquire(&bcache.lock);
   b->refcnt--;
   release(&bcache.lock);
 }
-
-

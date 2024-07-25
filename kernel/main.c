@@ -6,40 +6,42 @@
 
 volatile static int started = 0;
 
-// start() jumps here in supervisor mode on all CPUs.
+// start() はすべてのCPUでスーパーバイザーモードでここにジャンプする。
 void
 main()
 {
   if(cpuid() == 0){
-    consoleinit();
-    printfinit();
+    // 0番目のCPUのみが以下の初期化を行う。
+    consoleinit();    // コンソールの初期化
+    printfinit();     // printfの初期化
     printf("\n");
     printf("xv6 kernel is booting\n");
     printf("\n");
-    kinit();         // physical page allocator
-    kvminit();       // create kernel page table
-    kvminithart();   // turn on paging
-    procinit();      // process table
-    trapinit();      // trap vectors
-    trapinithart();  // install kernel trap vector
-    plicinit();      // set up interrupt controller
-    plicinithart();  // ask PLIC for device interrupts
-    binit();         // buffer cache
-    iinit();         // inode table
-    fileinit();      // file table
-    virtio_disk_init(); // emulated hard disk
-    userinit();      // first user process
+    kinit();          // 物理ページアロケータ
+    kvminit();        // カーネルページテーブルの作成
+    kvminithart();    // ページングを有効にする
+    procinit();       // プロセステーブルの初期化
+    trapinit();       // トラップベクターの初期化
+    trapinithart();   // カーネルトラップベクターのインストール
+    plicinit();       // 割り込みコントローラのセットアップ
+    plicinithart();   // デバイス割り込みのためにPLICにリクエスト
+    binit();          // バッファキャッシュの初期化
+    iinit();          // inodeテーブルの初期化
+    fileinit();       // ファイルテーブルの初期化
+    virtio_disk_init(); // エミュレートされたハードディスクの初期化
+    userinit();       // 最初のユーザープロセスの初期化
     __sync_synchronize();
     started = 1;
   } else {
+    // 他のCPUは、初期化が完了するまで待機する。
     while(started == 0)
       ;
     __sync_synchronize();
     printf("hart %d starting\n", cpuid());
-    kvminithart();    // turn on paging
-    trapinithart();   // install kernel trap vector
-    plicinithart();   // ask PLIC for device interrupts
+    kvminithart();    // ページングを有効にする
+    trapinithart();   // カーネルトラップベクターのインストール
+    plicinithart();   // デバイス割り込みのためにPLICにリクエスト
   }
 
-  scheduler();        
+  scheduler();        // スケジューラを開始
 }

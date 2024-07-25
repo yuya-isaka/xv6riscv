@@ -1,8 +1,6 @@
-//
-// File-system system calls.
-// Mostly argument checking, since we don't trust
-// user code, and calls into file.c and fs.c.
-//
+// ファイルシステムのシステムコール。
+// 主に引数のチェックを行い、信頼できないユーザーコードからの呼び出しを検証し、
+// file.cやfs.cに処理を委譲する。
 
 #include "types.h"
 #include "riscv.h"
@@ -16,8 +14,8 @@
 #include "file.h"
 #include "fcntl.h"
 
-// Fetch the nth word-sized system call argument as a file descriptor
-// and return both the descriptor and the corresponding struct file.
+// n番目のワードサイズのシステムコール引数をファイルディスクリプタとして取得し、
+// そのディスクリプタと対応するstruct fileを返す。
 static int
 argfd(int n, int *pfd, struct file **pf)
 {
@@ -34,8 +32,8 @@ argfd(int n, int *pfd, struct file **pf)
   return 0;
 }
 
-// Allocate a file descriptor for the given file.
-// Takes over file reference from caller on success.
+// 指定されたファイルのためにファイルディスクリプタを割り当てる。
+// 成功した場合、ファイル参照を呼び出し元から引き継ぐ。
 static int
 fdalloc(struct file *f)
 {
@@ -51,6 +49,8 @@ fdalloc(struct file *f)
   return -1;
 }
 
+// システムコールdupの実装。
+// ファイルディスクリプタを複製する。
 uint64
 sys_dup(void)
 {
@@ -65,6 +65,8 @@ sys_dup(void)
   return fd;
 }
 
+// システムコールreadの実装。
+// ファイルからデータを読み込む。
 uint64
 sys_read(void)
 {
@@ -79,13 +81,15 @@ sys_read(void)
   return fileread(f, p, n);
 }
 
+// システムコールwriteの実装。
+// ファイルにデータを書き込む。
 uint64
 sys_write(void)
 {
   struct file *f;
   int n;
   uint64 p;
-  
+
   argaddr(1, &p);
   argint(2, &n);
   if(argfd(0, 0, &f) < 0)
@@ -94,6 +98,8 @@ sys_write(void)
   return filewrite(f, p, n);
 }
 
+// システムコールcloseの実装。
+// ファイルを閉じる。
 uint64
 sys_close(void)
 {
@@ -107,11 +113,13 @@ sys_close(void)
   return 0;
 }
 
+// システムコールfstatの実装。
+// ファイルのステータスを取得する。
 uint64
 sys_fstat(void)
 {
   struct file *f;
-  uint64 st; // user pointer to struct stat
+  uint64 st; // ユーザーポインタを指すstruct stat
 
   argaddr(1, &st);
   if(argfd(0, 0, &f) < 0)
@@ -119,7 +127,7 @@ sys_fstat(void)
   return filestat(f, st);
 }
 
-// Create the path new as a link to the same inode as old.
+// パスnewをoldと同じiノードにリンクするシステムコールlinkの実装。
 uint64
 sys_link(void)
 {
@@ -169,7 +177,7 @@ bad:
   return -1;
 }
 
-// Is the directory dp empty except for "." and ".." ?
+// ディレクトリdpが"."と".."以外に空かどうかを確認する。
 static int
 isdirempty(struct inode *dp)
 {
@@ -185,6 +193,8 @@ isdirempty(struct inode *dp)
   return 1;
 }
 
+// システムコールunlinkの実装。
+// ファイルを削除する。
 uint64
 sys_unlink(void)
 {
@@ -204,7 +214,7 @@ sys_unlink(void)
 
   ilock(dp);
 
-  // Cannot unlink "." or "..".
+  // "."や".."を削除することはできない。
   if(namecmp(name, ".") == 0 || namecmp(name, "..") == 0)
     goto bad;
 
@@ -242,6 +252,8 @@ bad:
   return -1;
 }
 
+// 指定されたパスにファイルやディレクトリを作成する。
+// 必要に応じて、型やメジャー、マイナー番号を指定する。
 static struct inode*
 create(char *path, short type, short major, short minor)
 {
@@ -273,8 +285,8 @@ create(char *path, short type, short major, short minor)
   ip->nlink = 1;
   iupdate(ip);
 
-  if(type == T_DIR){  // Create . and .. entries.
-    // No ip->nlink++ for ".": avoid cyclic ref count.
+  if(type == T_DIR){  // "."と".."エントリを作成する。
+    // "."にはip->nlink++は不要: 循環参照カウントを避けるため。
     if(dirlink(ip, ".", ip->inum) < 0 || dirlink(ip, "..", dp->inum) < 0)
       goto fail;
   }
@@ -283,8 +295,8 @@ create(char *path, short type, short major, short minor)
     goto fail;
 
   if(type == T_DIR){
-    // now that success is guaranteed:
-    dp->nlink++;  // for ".."
+    // 成功が保証されたので、dp->nlinkを増加させる。
+    dp->nlink++;  // ".."のために
     iupdate(dp);
   }
 
@@ -293,7 +305,7 @@ create(char *path, short type, short major, short minor)
   return ip;
 
  fail:
-  // something went wrong. de-allocate ip.
+  // 何か問題が発生した場合、ipを解放する。
   ip->nlink = 0;
   iupdate(ip);
   iunlockput(ip);
@@ -301,6 +313,8 @@ create(char *path, short type, short major, short minor)
   return 0;
 }
 
+// システムコールopenの実装。
+// ファイルを開く。必要に応じてファイルを作成する。
 uint64
 sys_open(void)
 {
@@ -370,6 +384,8 @@ sys_open(void)
   return fd;
 }
 
+// システムコールmkdirの実装。
+// 新しいディレクトリを作成する。
 uint64
 sys_mkdir(void)
 {
@@ -386,6 +402,8 @@ sys_mkdir(void)
   return 0;
 }
 
+// システムコールmknodの実装。
+// 特殊ファイルやデバイスファイルを作成する。
 uint64
 sys_mknod(void)
 {
@@ -406,13 +424,15 @@ sys_mknod(void)
   return 0;
 }
 
+// システムコールchdirの実装。
+// カレントディレクトリを変更する。
 uint64
 sys_chdir(void)
 {
   char path[MAXPATH];
   struct inode *ip;
   struct proc *p = myproc();
-  
+
   begin_op();
   if(argstr(0, path, MAXPATH) < 0 || (ip = namei(path)) == 0){
     end_op();
@@ -431,6 +451,8 @@ sys_chdir(void)
   return 0;
 }
 
+// システムコールexecの実装。
+// 新しいプログラムを実行する。
 uint64
 sys_exec(void)
 {
@@ -469,15 +491,17 @@ sys_exec(void)
   return ret;
 
  bad:
-  for(i = 0; i < NELEM(argv) && argv[i] != 0; i++)
+  for(i = 0; i < NELEM(argv) && argv[i] != 0;)
     kfree(argv[i]);
   return -1;
 }
 
+// システムコールpipeの実装。
+// パイプを作成する。
 uint64
 sys_pipe(void)
 {
-  uint64 fdarray; // user pointer to array of two integers
+  uint64 fdarray; // ユーザーポインタからなる整数の配列
   struct file *rf, *wf;
   int fd0, fd1;
   struct proc *p = myproc();

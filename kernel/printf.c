@@ -1,5 +1,5 @@
 //
-// formatted console output -- printf, panic.
+// フォーマットされたコンソール出力 -- printf, panic.
 //
 
 #include <stdarg.h>
@@ -15,9 +15,9 @@
 #include "defs.h"
 #include "proc.h"
 
-volatile int panicked = 0;
+volatile int panicked = 0; // panic状態を示すフラグ
 
-// lock to avoid interleaving concurrent printf's.
+// 同時に発生する可能性があるprintfの出力を回避するためのロック
 static struct {
   struct spinlock lock;
   int locking;
@@ -25,6 +25,7 @@ static struct {
 
 static char digits[] = "0123456789abcdef";
 
+// 整数を指定の基数でコンソールに出力する関数
 static void
 printint(long long xx, int base, int sign)
 {
@@ -49,6 +50,7 @@ printint(long long xx, int base, int sign)
     consputc(buf[i]);
 }
 
+// ポインタの値をコンソールに出力する関数
 static void
 printptr(uint64 x)
 {
@@ -59,7 +61,7 @@ printptr(uint64 x)
     consputc(digits[x >> (sizeof(uint64) * 8 - 4)]);
 }
 
-// Print to the console.
+// コンソールに出力する関数
 int
 printf(char *fmt, ...)
 {
@@ -118,7 +120,7 @@ printf(char *fmt, ...)
     } else if(c0 == 0){
       break;
     } else {
-      // Print unknown % sequence to draw attention.
+      // 未知の%シーケンスを出力して注意を引く。
       consputc('%');
       consputc(c0);
     }
@@ -144,7 +146,7 @@ printf(char *fmt, ...)
       consputc('%');
       break;
     default:
-      // Print unknown % sequence to draw attention.
+      // 未知の%シーケンスを出力して注意を引く。
       consputc('%');
       consputc(c);
       break;
@@ -159,17 +161,19 @@ printf(char *fmt, ...)
   return 0;
 }
 
+// システムパニックを引き起こす関数
 void
 panic(char *s)
 {
   pr.locking = 0;
   printf("panic: ");
   printf("%s\n", s);
-  panicked = 1; // freeze uart output from other CPUs
+  panicked = 1; // 他のCPUからのUART出力を凍結
   for(;;)
     ;
 }
 
+// printf機能の初期化
 void
 printfinit(void)
 {

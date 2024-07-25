@@ -1,21 +1,21 @@
-        # qemu -kernel loads the kernel at 0x80000000
-        # and causes each hart (i.e. CPU) to jump there.
-        # kernel.ld causes the following code to
-        # be placed at 0x80000000.
+        # qemu -kernel はカーネルを0x80000000にロードし、
+        # 各ハート（すなわちCPU）をそこにジャンプさせる。
+        # kernel.ld は以下のコードを
+        # 0x80000000に配置する。
 .section .text
 .global _entry
 _entry:
-        # set up a stack for C.
-        # stack0 is declared in start.c,
-        # with a 4096-byte stack per CPU.
+        # C言語用のスタックを設定する。
+        # stack0 は start.c に宣言されており、
+        # 各CPUに4096バイトのスタックが割り当てられている。
         # sp = stack0 + (hartid * 4096)
-        la sp, stack0
-        li a0, 1024*4
-        csrr a1, mhartid
-        addi a1, a1, 1
-        mul a0, a0, a1
-        add sp, sp, a0
-        # jump to start() in start.c
+        la sp, stack0       # スタックのベースアドレスをロードする。
+        li a0, 1024*4       # 4096バイトをロードする。
+        csrr a1, mhartid    # 現在のハートIDを取得する。
+        addi a1, a1, 1      # ハートIDを1増加させる。
+        mul a0, a0, a1      # 4096バイトにハートIDを掛け算する。
+        add sp, sp, a0      # スタックポインタを計算する。
+        # start.c の start() にジャンプする。
         call start
 spin:
-        j spin
+        j spin              # 無限ループでスピンする。

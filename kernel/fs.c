@@ -1,13 +1,12 @@
-// File system implementation.  Five layers:
-//   + Blocks: allocator for raw disk blocks.
-//   + Log: crash recovery for multi-step updates.
-//   + Files: inode allocator, reading, writing, metadata.
-//   + Directories: inode with special contents (list of other inodes!)
-//   + Names: paths like /usr/rtm/xv6/fs.c for convenient naming.
+// ファイルシステムの実装である。五つの層から成る:
+//   + Blocks: 生ディスクブロックのアロケータである。
+//   + Log: マルチステップ更新のクラッシュリカバリである。
+//   + Files: inodeのアロケータ、読み取り、書き込み、メタデータである。
+//   + Directories: 他のinodeのリストを含む特別な内容を持つinodeである。
+//   + Names: /usr/rtm/xv6/fs.c のような便利な命名のためのパスである。
 //
-// This file contains the low-level file system manipulation
-// routines.  The (higher-level) system call implementations
-// are in sysfile.c.
+// このファイルは低レベルのファイルシステム操作ルーチンを含む。
+// （高レベルの）システムコールの実装はsysfile.cにある。
 
 #include "types.h"
 #include "riscv.h"
@@ -22,11 +21,11 @@
 #include "file.h"
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
-// there should be one superblock per disk device, but we run with
-// only one device
-struct superblock sb; 
 
-// Read the super block.
+// ディスクデバイスごとに一つのスーパーブロックがあるべきであるが、我々は一つのデバイスで動作する。
+struct superblock sb;
+
+// スーパーブロックを読み込む関数である。
 static void
 readsb(int dev, struct superblock *sb)
 {
@@ -37,7 +36,7 @@ readsb(int dev, struct superblock *sb)
   brelse(bp);
 }
 
-// Init fs
+// ファイルシステムを初期化する関数である。
 void
 fsinit(int dev) {
   readsb(dev, &sb);
@@ -46,7 +45,7 @@ fsinit(int dev) {
   initlog(dev, &sb);
 }
 
-// Zero a block.
+// ブロックをゼロクリアする関数である。
 static void
 bzero(int dev, int bno)
 {
@@ -58,10 +57,10 @@ bzero(int dev, int bno)
   brelse(bp);
 }
 
-// Blocks.
+// ブロック。
 
-// Allocate a zeroed disk block.
-// returns 0 if out of disk space.
+// ゼロクリアされたディスクブロックを割り当てる関数である。
+// ディスクスペースがない場合は0を返す。
 static uint
 balloc(uint dev)
 {
@@ -73,8 +72,8 @@ balloc(uint dev)
     bp = bread(dev, BBLOCK(b, sb));
     for(bi = 0; bi < BPB && b + bi < sb.size; bi++){
       m = 1 << (bi % 8);
-      if((bp->data[bi/8] & m) == 0){  // Is block free?
-        bp->data[bi/8] |= m;  // Mark block in use.
+      if((bp->data[bi/8] & m) == 0){  // ブロックが空いているか？
+        bp->data[bi/8] |= m;  // 使用中としてマークする。
         log_write(bp);
         brelse(bp);
         bzero(dev, b + bi);
@@ -87,7 +86,7 @@ balloc(uint dev)
   return 0;
 }
 
-// Free a disk block.
+// ディスクブロックを解放する関数である。
 static void
 bfree(int dev, uint b)
 {
@@ -104,97 +103,75 @@ bfree(int dev, uint b)
   brelse(bp);
 }
 
-// Inodes.
-//
-// An inode describes a single unnamed file.
-// The inode disk structure holds metadata: the file's type,
-// its size, the number of links referring to it, and the
-// list of blocks holding the file's content.
-//
-// The inodes are laid out sequentially on disk at block
-// sb.inodestart. Each inode has a number, indicating its
-// position on the disk.
-//
-// The kernel keeps a table of in-use inodes in memory
-// to provide a place for synchronizing access
-// to inodes used by multiple processes. The in-memory
-// inodes include book-keeping information that is
-// not stored on disk: ip->ref and ip->valid.
-//
-// An inode and its in-memory representation go through a
-// sequence of states before they can be used by the
-// rest of the file system code.
-//
-// * Allocation: an inode is allocated if its type (on disk)
-//   is non-zero. ialloc() allocates, and iput() frees if
-//   the reference and link counts have fallen to zero.
-//
-// * Referencing in table: an entry in the inode table
-//   is free if ip->ref is zero. Otherwise ip->ref tracks
-//   the number of in-memory pointers to the entry (open
-//   files and current directories). iget() finds or
-//   creates a table entry and increments its ref; iput()
-//   decrements ref.
-//
-// * Valid: the information (type, size, &c) in an inode
-//   table entry is only correct when ip->valid is 1.
-//   ilock() reads the inode from
-//   the disk and sets ip->valid, while iput() clears
-//   ip->valid if ip->ref has fallen to zero.
-//
-// * Locked: file system code may only examine and modify
-//   the information in an inode and its content if it
-//   has first locked the inode.
-//
-// Thus a typical sequence is:
+// Inodes。
+
+// inodeは一つの名前のないファイルを表す。
+// inodeディスク構造はメタデータを保持する：ファイルの種類、サイズ、リンク数、ファイルの内容を保持するブロックのリストである。
+
+// inodeはディスク上のsb.inodestartブロックに順次配置される。
+// 各inodeにはその位置を示す番号がある。
+
+// カーネルはメモリ内で使用中のinodeのテーブルを保持し、
+// 複数のプロセスが使用するinodeへのアクセスを同期させる場所を提供する。
+// メモリ内のinodeには、ディスク上に保存されない管理情報（ip->refおよびip->valid）が含まれる。
+
+// inodeとそのメモリ内の表現は、ファイルシステムコードが使用できるようになる前に一連の状態を経る。
+
+// * 割り当て：inodeが割り当てられているのは、その種類（ディスク上）がゼロでない場合である。
+//   ialloc()が割り当て、iput()が参照およびリンクカウントがゼロになった場合に解放する。
+
+// * テーブルでの参照：inodeテーブルのエントリが空いているのはip->refがゼロの場合である。
+//   それ以外の場合、ip->refはエントリへのメモリ内ポインタの数を追跡する（オープンファイルおよび現在のディレクトリ）。
+//   iget()はテーブルエントリを見つけたり作成したりし、参照カウントをインクリメントし、iput()は参照カウントをデクリメントする。
+
+// * 有効：inodeテーブルエントリ内の情報（種類、サイズなど）はip->validが1の場合にのみ正しい。
+//   ilock()はディスクからinodeを読み込み、ip->validをセットし、iput()はip->refがゼロになった場合にip->validをクリアする。
+
+// * ロック：ファイルシステムコードはinodeとその内容の情報を調べたり変更したりする前にinodeをロックする必要がある。
+
+// したがって、典型的なシーケンスは次の通りである：
 //   ip = iget(dev, inum)
 //   ilock(ip)
-//   ... examine and modify ip->xxx ...
+//   ... ip->xxx を調べたり変更したりする...
 //   iunlock(ip)
 //   iput(ip)
-//
-// ilock() is separate from iget() so that system calls can
-// get a long-term reference to an inode (as for an open file)
-// and only lock it for short periods (e.g., in read()).
-// The separation also helps avoid deadlock and races during
-// pathname lookup. iget() increments ip->ref so that the inode
-// stays in the table and pointers to it remain valid.
-//
-// Many internal file system functions expect the caller to
-// have locked the inodes involved; this lets callers create
-// multi-step atomic operations.
-//
-// The itable.lock spin-lock protects the allocation of itable
-// entries. Since ip->ref indicates whether an entry is free,
-// and ip->dev and ip->inum indicate which i-node an entry
-// holds, one must hold itable.lock while using any of those fields.
-//
-// An ip->lock sleep-lock protects all ip-> fields other than ref,
-// dev, and inum.  One must hold ip->lock in order to
-// read or write that inode's ip->valid, ip->size, ip->type, &c.
+
+// ilock()はiget()とは別であり、システムコールがinodeへの長期的な参照を取得できるようにし（オープンファイルの場合）、短期間（例：read()内）だけロックする。
+// この分離は、パス名のルックアップ中のデッドロックや競合を回避するのにも役立つ。iget()はip->refをインクリメントし、inodeがテーブルに留まり、そのポインタが有効なままであることを保証する。
+
+// 多くの内部ファイルシステム関数は、呼び出し元が関与するinodeをロックしていることを期待する。
+// これにより、呼び出し元がマルチステップのアトミック操作を作成できるようになる。
+
+// itable.lockスピンロックはitableエントリの割り当てを保護する。
+// ip->refがエントリが空いているかどうかを示し、ip->devおよびip->inumがエントリが保持しているinodeを示すため、これらのフィールドを使用する際にはitable.lockを保持する必要がある。
+
+// ip->lockスリープロックはref、dev、およびinum以外のすべてのipフィールドを保護する。
+// ip->valid、ip->size、ip->typeなどを読み書きするためにはip->lockを保持する必要がある。
 
 struct {
   struct spinlock lock;
   struct inode inode[NINODE];
 } itable;
 
+// ファイルシステムを初期化する関数である。
 void
 iinit()
 {
   int i = 0;
-  
+
   initlock(&itable.lock, "itable");
   for(i = 0; i < NINODE; i++) {
     initsleeplock(&itable.inode[i].lock, "inode");
   }
 }
 
+// デバイスdev上のinodeを取得する関数である。
 static struct inode* iget(uint dev, uint inum);
 
-// Allocate an inode on device dev.
-// Mark it as allocated by  giving it type type.
-// Returns an unlocked but allocated and referenced inode,
-// or NULL if there is no free inode.
+// デバイスdev上のinodeを割り当てる関数である。
+// 種類を指定して割り当て済みとしてマークする。
+// ロックされていないが割り当て済みで参照されたinodeを返す。
+// 空きinodeがない場合はNULLを返す。
 struct inode*
 ialloc(uint dev, short type)
 {
@@ -205,10 +182,11 @@ ialloc(uint dev, short type)
   for(inum = 1; inum < sb.ninodes; inum++){
     bp = bread(dev, IBLOCK(inum, sb));
     dip = (struct dinode*)bp->data + inum%IPB;
-    if(dip->type == 0){  // a free inode
+
+    if(dip->type == 0){  // 空いているinodeであるか？
       memset(dip, 0, sizeof(*dip));
       dip->type = type;
-      log_write(bp);   // mark it allocated on the disk
+      log_write(bp);   // ディスク上に割り当て済みとしてマークする。
       brelse(bp);
       return iget(dev, inum);
     }
@@ -218,10 +196,9 @@ ialloc(uint dev, short type)
   return 0;
 }
 
-// Copy a modified in-memory inode to disk.
-// Must be called after every change to an ip->xxx field
-// that lives on disk.
-// Caller must hold ip->lock.
+// 修正されたメモリ内のinodeをディスクにコピーする関数である。
+// ip->xxxフィールドに変更を加えた後に必ず呼び出す必要がある。
+// 呼び出し元はip->lockを保持している必要がある。
 void
 iupdate(struct inode *ip)
 {
@@ -240,9 +217,9 @@ iupdate(struct inode *ip)
   brelse(bp);
 }
 
-// Find the inode with number inum on device dev
-// and return the in-memory copy. Does not lock
-// the inode and does not read it from disk.
+// デバイスdev上のinum番号を持つinodeを見つけて
+// メモリ内のコピーを返す関数である。
+// inodeをロックせず、ディスクから読み込むこともない。
 static struct inode*
 iget(uint dev, uint inum)
 {
@@ -250,7 +227,7 @@ iget(uint dev, uint inum)
 
   acquire(&itable.lock);
 
-  // Is the inode already in the table?
+  // inodeがすでにテーブルにあるか？
   empty = 0;
   for(ip = &itable.inode[0]; ip < &itable.inode[NINODE]; ip++){
     if(ip->ref > 0 && ip->dev == dev && ip->inum == inum){
@@ -258,11 +235,11 @@ iget(uint dev, uint inum)
       release(&itable.lock);
       return ip;
     }
-    if(empty == 0 && ip->ref == 0)    // Remember empty slot.
+    if(empty == 0 && ip->ref == 0)    // 空きスロットを覚えておく。
       empty = ip;
   }
 
-  // Recycle an inode entry.
+  // inodeエントリをリサイクルする。
   if(empty == 0)
     panic("iget: no inodes");
 
@@ -276,8 +253,8 @@ iget(uint dev, uint inum)
   return ip;
 }
 
-// Increment reference count for ip.
-// Returns ip to enable ip = idup(ip1) idiom.
+// ipの参照カウントを増加させる関数である。
+// ipを返し、ip = idup(ip1)のイディオムを可能にする。
 struct inode*
 idup(struct inode *ip)
 {
@@ -287,8 +264,8 @@ idup(struct inode *ip)
   return ip;
 }
 
-// Lock the given inode.
-// Reads the inode from disk if necessary.
+// 指定されたinodeをロックする関数である。
+// 必要に応じてディスクからinodeを読み込む。
 void
 ilock(struct inode *ip)
 {
@@ -316,7 +293,7 @@ ilock(struct inode *ip)
   }
 }
 
-// Unlock the given inode.
+// 指定されたinodeのロックを解除する関数である。
 void
 iunlock(struct inode *ip)
 {
@@ -326,23 +303,22 @@ iunlock(struct inode *ip)
   releasesleep(&ip->lock);
 }
 
-// Drop a reference to an in-memory inode.
-// If that was the last reference, the inode table entry can
-// be recycled.
-// If that was the last reference and the inode has no links
-// to it, free the inode (and its content) on disk.
-// All calls to iput() must be inside a transaction in
-// case it has to free the inode.
+// メモリ内inodeへの参照を減らす関数である。
+// これが最後の参照である場合、inodeテーブルエントリをリサイクルできる。
+// これが最後の参照であり、inodeにリンクがない場合、
+// ディスク上のinode（およびその内容）を解放する。
+// iput()へのすべての呼び出しはトランザクション内で行う必要がある。
+// inodeを解放する可能性があるため。
 void
 iput(struct inode *ip)
 {
   acquire(&itable.lock);
 
   if(ip->ref == 1 && ip->valid && ip->nlink == 0){
-    // inode has no links and no other references: truncate and free.
+    // inodeにリンクがなく、他の参照もない場合：トランケートして解放する。
 
-    // ip->ref == 1 means no other process can have ip locked,
-    // so this acquiresleep() won't block (or deadlock).
+    // ip->ref == 1 ということは、他のプロセスがipをロックしていないことを意味し、
+    // このacquiresleep()はブロック（またはデッドロック）しない。
     acquiresleep(&ip->lock);
 
     release(&itable.lock);
@@ -361,7 +337,7 @@ iput(struct inode *ip)
   release(&itable.lock);
 }
 
-// Common idiom: unlock, then put.
+// 共通のイディオムである：ロック解除してからputする。
 void
 iunlockput(struct inode *ip)
 {
@@ -369,16 +345,15 @@ iunlockput(struct inode *ip)
   iput(ip);
 }
 
-// Inode content
-//
-// The content (data) associated with each inode is stored
-// in blocks on the disk. The first NDIRECT block numbers
-// are listed in ip->addrs[].  The next NINDIRECT blocks are
-// listed in block ip->addrs[NDIRECT].
+// inodeの内容。
 
-// Return the disk block address of the nth block in inode ip.
-// If there is no such block, bmap allocates one.
-// returns 0 if out of disk space.
+// 各inodeに関連付けられた内容（データ）は、ディスク上のブロックに格納される。
+// 最初のNDIRECTブロック番号はip->addrs[]にリストされる。
+// 次のNINDIRECTブロックはip->addrs[NDIRECT]ブロックにリストされる。
+
+// inode ipのnthブロックのディスクブロックアドレスを返す関数である。
+// そのようなブロックが存在しない場合、bmapは一つを割り当てる。
+// ディスクスペースがない場合は0を返す。
 static uint
 bmap(struct inode *ip, uint bn)
 {
@@ -397,7 +372,7 @@ bmap(struct inode *ip, uint bn)
   bn -= NDIRECT;
 
   if(bn < NINDIRECT){
-    // Load indirect block, allocating if necessary.
+    // 間接ブロックをロードし、必要に応じて割り当てる。
     if((addr = ip->addrs[NDIRECT]) == 0){
       addr = balloc(ip->dev);
       if(addr == 0)
@@ -420,8 +395,8 @@ bmap(struct inode *ip, uint bn)
   panic("bmap: out of range");
 }
 
-// Truncate inode (discard contents).
-// Caller must hold ip->lock.
+// inodeをトランケートする関数である（内容を破棄する）。
+// 呼び出し元はip->lockを保持している必要がある。
 void
 itrunc(struct inode *ip)
 {
@@ -452,8 +427,8 @@ itrunc(struct inode *ip)
   iupdate(ip);
 }
 
-// Copy stat information from inode.
-// Caller must hold ip->lock.
+// inodeからstat情報をコピーする関数である。
+// 呼び出し元はip->lockを保持している必要がある。
 void
 stati(struct inode *ip, struct stat *st)
 {
@@ -464,10 +439,10 @@ stati(struct inode *ip, struct stat *st)
   st->size = ip->size;
 }
 
-// Read data from inode.
-// Caller must hold ip->lock.
-// If user_dst==1, then dst is a user virtual address;
-// otherwise, dst is a kernel address.
+// inodeからデータを読み取る関数である。
+// 呼び出し元はip->lockを保持している必要がある。
+// user_dst==1の場合、dstはユーザ仮想アドレスである。
+// それ以外の場合、dstはカーネルアドレスである。
 int
 readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n)
 {
@@ -495,13 +470,12 @@ readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n)
   return tot;
 }
 
-// Write data to inode.
-// Caller must hold ip->lock.
-// If user_src==1, then src is a user virtual address;
-// otherwise, src is a kernel address.
-// Returns the number of bytes successfully written.
-// If the return value is less than the requested n,
-// there was an error of some kind.
+// inodeにデータを書き込む関数である。
+// 呼び出し元はip->lockを保持している必要がある。
+// user_src==1の場合、srcはユーザ仮想アドレスである。
+// それ以外の場合、srcはカーネルアドレスである。
+// 成功したバイト数を返す。
+// 返された値が要求されたnより少ない場合、何らかのエラーが発生している。
 int
 writei(struct inode *ip, int user_src, uint64 src, uint off, uint n)
 {
@@ -530,24 +504,24 @@ writei(struct inode *ip, int user_src, uint64 src, uint off, uint n)
   if(off > ip->size)
     ip->size = off;
 
-  // write the i-node back to disk even if the size didn't change
-  // because the loop above might have called bmap() and added a new
-  // block to ip->addrs[].
+  // ループ中にbmap()が呼ばれ、新しいブロックがip->addrs[]に追加された可能性があるため、
+  // サイズが変更されなくてもi-nodeをディスクに書き戻す。
   iupdate(ip);
 
   return tot;
 }
 
-// Directories
+// ディレクトリ
 
+// 文字列sとtを比較する関数である。
 int
 namecmp(const char *s, const char *t)
 {
   return strncmp(s, t, DIRSIZ);
 }
 
-// Look for a directory entry in a directory.
-// If found, set *poff to byte offset of entry.
+// ディレクトリ内のディレクトリエントリを探す関数である。
+// 見つかった場合、エントリのバイトオフセットを*poffに設定する。
 struct inode*
 dirlookup(struct inode *dp, char *name, uint *poff)
 {
@@ -563,7 +537,7 @@ dirlookup(struct inode *dp, char *name, uint *poff)
     if(de.inum == 0)
       continue;
     if(namecmp(name, de.name) == 0){
-      // entry matches path element
+      // エントリがパス要素と一致する。
       if(poff)
         *poff = off;
       inum = de.inum;
@@ -574,8 +548,8 @@ dirlookup(struct inode *dp, char *name, uint *poff)
   return 0;
 }
 
-// Write a new directory entry (name, inum) into the directory dp.
-// Returns 0 on success, -1 on failure (e.g. out of disk blocks).
+// 新しいディレクトリエントリ（name, inum）をディレクトリdpに書き込む関数である。
+// 成功した場合は0を返し、失敗した場合（例：ディスクブロックがない場合）は-1を返す。
 int
 dirlink(struct inode *dp, char *name, uint inum)
 {
@@ -583,13 +557,13 @@ dirlink(struct inode *dp, char *name, uint inum)
   struct dirent de;
   struct inode *ip;
 
-  // Check that name is not present.
+  // 名前が存在しないことを確認する。
   if((ip = dirlookup(dp, name, 0)) != 0){
     iput(ip);
     return -1;
   }
 
-  // Look for an empty dirent.
+  // 空のディレクトリエントリを探す。
   for(off = 0; off < dp->size; off += sizeof(de)){
     if(readi(dp, 0, (uint64)&de, off, sizeof(de)) != sizeof(de))
       panic("dirlink read");
@@ -605,18 +579,18 @@ dirlink(struct inode *dp, char *name, uint inum)
   return 0;
 }
 
-// Paths
+// パス
 
-// Copy the next path element from path into name.
-// Return a pointer to the element following the copied one.
-// The returned path has no leading slashes,
-// so the caller can check *path=='\0' to see if the name is the last one.
-// If no name to remove, return 0.
+// パスから次のパス要素をコピーする関数である。
+// コピーした要素の後続の要素へのポインタを返す。
+// 返されたパスには先頭のスラッシュが含まれないため、
+// nameが最後の要素であるかを確認するために*path=='\0'をチェックできる。
+// 名前を取り除く要素がない場合、0を返す。
 //
-// Examples:
-//   skipelem("a/bb/c", name) = "bb/c", setting name = "a"
-//   skipelem("///a//bb", name) = "bb", setting name = "a"
-//   skipelem("a", name) = "", setting name = "a"
+// 例：
+//   skipelem("a/bb/c", name) = "bb/c", name = "a"をセット
+//   skipelem("///a//bb", name) = "bb", name = "a"をセット
+//   skipelem("a", name) = "", name = "a"をセット
 //   skipelem("", name) = skipelem("////", name) = 0
 //
 static char*
@@ -644,10 +618,10 @@ skipelem(char *path, char *name)
   return path;
 }
 
-// Look up and return the inode for a path name.
-// If parent != 0, return the inode for the parent and copy the final
-// path element into name, which must have room for DIRSIZ bytes.
-// Must be called inside a transaction since it calls iput().
+// パス名のinodeを探して返す関数である。
+// parent != 0の場合、親のinodeを返し、最終パス要素をnameにコピーする。
+// nameにはDIRSIZバイト分の余裕が必要である。
+// iput()を呼び出すため、トランザクション内で呼び出す必要がある。
 static struct inode*
 namex(char *path, int nameiparent, char *name)
 {
@@ -665,7 +639,7 @@ namex(char *path, int nameiparent, char *name)
       return 0;
     }
     if(nameiparent && *path == '\0'){
-      // Stop one level early.
+      // 一つのレベル早く停止する。
       iunlock(ip);
       return ip;
     }
@@ -683,6 +657,7 @@ namex(char *path, int nameiparent, char *name)
   return ip;
 }
 
+// パス名のinodeを返す関数である。
 struct inode*
 namei(char *path)
 {
@@ -690,6 +665,7 @@ namei(char *path)
   return namex(path, 0, name);
 }
 
+// 親のパス名のinodeを返し、最終パス要素をnameにコピーする関数である。
 struct inode*
 nameiparent(char *path, char *name)
 {

@@ -20,20 +20,18 @@ static void freeproc(struct proc *p);
 
 extern char trampoline[]; // trampoline.S
 
-// helps ensure that wakeups of wait()ing
-// parents are not lost. helps obey the
-// memory model when using p->parent.
-// must be acquired before any p->lock.
+// 親プロセスがwait()中にウェイクアップが失われないようにするためのロック。
+// p->parentを使用する際のメモリモデルを遵守するために使用する。
+// p->lockを取得する前に必ず取得する必要がある。
 struct spinlock wait_lock;
 
-// Allocate a page for each process's kernel stack.
-// Map it high in memory, followed by an invalid
-// guard page.
+// 各プロセスのカーネルスタック用にページを割り当てる。
+// メモリの高い位置にマップし、無効なガードページが続く。
 void
 proc_mapstacks(pagetable_t kpgtbl)
 {
   struct proc *p;
-  
+
   for(p = proc; p < &proc[NPROC]; p++) {
     char *pa = kalloc();
     if(pa == 0)
@@ -43,12 +41,12 @@ proc_mapstacks(pagetable_t kpgtbl)
   }
 }
 
-// initialize the proc table.
+// プロセステーブルを初期化する関数である。
 void
 procinit(void)
 {
   struct proc *p;
-  
+
   initlock(&pid_lock, "nextpid");
   initlock(&wait_lock, "wait_lock");
   for(p = proc; p < &proc[NPROC]; p++) {
@@ -58,9 +56,8 @@ procinit(void)
   }
 }
 
-// Must be called with interrupts disabled,
-// to prevent race with process being moved
-// to a different CPU.
+// 割り込みを無効にして呼び出す必要がある。
+// プロセスが別のCPUに移動する競合を防ぐためである。
 int
 cpuid()
 {
@@ -68,8 +65,8 @@ cpuid()
   return id;
 }
 
-// Return this CPU's cpu struct.
-// Interrupts must be disabled.
+// 現在のCPUの構造体を返す。
+// 割り込みは無効にする必要がある。
 struct cpu*
 mycpu(void)
 {
@@ -78,7 +75,7 @@ mycpu(void)
   return c;
 }
 
-// Return the current struct proc *, or zero if none.
+// 現在のプロセス構造体を返す。プロセスがない場合は0を返す。
 struct proc*
 myproc(void)
 {
@@ -89,11 +86,12 @@ myproc(void)
   return p;
 }
 
+// 新しいPIDを割り当てる関数である。
 int
 allocpid()
 {
   int pid;
-  
+
   acquire(&pid_lock);
   pid = nextpid;
   nextpid = nextpid + 1;
@@ -102,10 +100,10 @@ allocpid()
   return pid;
 }
 
-// Look in the process table for an UNUSED proc.
-// If found, initialize state required to run in the kernel,
-// and return with p->lock held.
-// If there are no free procs, or a memory allocation fails, return 0.
+// UNUSED状態のプロセスをプロセステーブルで探す。
+// 見つかった場合、カーネルで動作するために必要な状態を初期化し、
+// p->lockを保持した状態で返す。
+// 空きプロセスがない場合やメモリ割り当てに失敗した場合は0を返す。
 static struct proc*
 allocproc(void)
 {
@@ -125,14 +123,14 @@ found:
   p->pid = allocpid();
   p->state = USED;
 
-  // Allocate a trapframe page.
+  // トラップフレームページを割り当てる。
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
     freeproc(p);
     release(&p->lock);
     return 0;
   }
 
-  // An empty user page table.
+  // 空のユーザーページテーブル。
   p->pagetable = proc_pagetable(p);
   if(p->pagetable == 0){
     freeproc(p);
@@ -140,8 +138,8 @@ found:
     return 0;
   }
 
-  // Set up new context to start executing at forkret,
-  // which returns to user space.
+  // 新しいコンテキストをセットアップして、forkretで実行を開始する。
+  // forkretはユーザースペースに戻る。
   memset(&p->context, 0, sizeof(p->context));
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
@@ -149,9 +147,9 @@ found:
   return p;
 }
 
-// free a proc structure and the data hanging from it,
-// including user pages.
-// p->lock must be held.
+// プロセス構造体とそれに関連するデータを解放する。
+// ユーザーページを含む。
+// p->lockは保持する必要がある。
 static void
 freeproc(struct proc *p)
 {
@@ -171,30 +169,27 @@ freeproc(struct proc *p)
   p->state = UNUSED;
 }
 
-// Create a user page table for a given process, with no user memory,
-// but with trampoline and trapframe pages.
+// 指定されたプロセスのためにユーザーページテーブルを作成する。
+// ユーザーメモリは含まれないが、トランポリンとトラップフレームページは含まれる。
 pagetable_t
 proc_pagetable(struct proc *p)
 {
   pagetable_t pagetable;
 
-  // An empty page table.
+  // 空のページテーブル。
   pagetable = uvmcreate();
   if(pagetable == 0)
     return 0;
 
-  // map the trampoline code (for system call return)
-  // at the highest user virtual address.
-  // only the supervisor uses it, on the way
-  // to/from user space, so not PTE_U.
+  // トランポリンコードを最高のユーザ仮想アドレスにマップする。
+  // スーパーバイザーのみが使用し、ユーザースペースに行き来する際に使用されるため、PTE_Uは不要。
   if(mappages(pagetable, TRAMPOLINE, PGSIZE,
               (uint64)trampoline, PTE_R | PTE_X) < 0){
     uvmfree(pagetable, 0);
     return 0;
   }
 
-  // map the trapframe page just below the trampoline page, for
-  // trampoline.S.
+  // トランポリンページの直下にトラップフレームページをマップする。
   if(mappages(pagetable, TRAPFRAME, PGSIZE,
               (uint64)(p->trapframe), PTE_R | PTE_W) < 0){
     uvmunmap(pagetable, TRAMPOLINE, 1, 0);
@@ -205,8 +200,7 @@ proc_pagetable(struct proc *p)
   return pagetable;
 }
 
-// Free a process's page table, and free the
-// physical memory it refers to.
+// プロセスのページテーブルを解放し、それが参照する物理メモリを解放する。
 void
 proc_freepagetable(pagetable_t pagetable, uint64 sz)
 {
@@ -215,8 +209,8 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
   uvmfree(pagetable, sz);
 }
 
-// a user program that calls exec("/init")
-// assembled from ../user/initcode.S
+// exec("/init")を呼び出すユーザープログラム。
+// ../user/initcode.Sからアセンブルされる。
 // od -t xC ../user/initcode
 uchar initcode[] = {
   0x17, 0x05, 0x00, 0x00, 0x13, 0x05, 0x45, 0x02,
@@ -228,7 +222,7 @@ uchar initcode[] = {
   0x00, 0x00, 0x00, 0x00
 };
 
-// Set up first user process.
+// 最初のユーザープロセスをセットアップする関数である。
 void
 userinit(void)
 {
@@ -236,15 +230,14 @@ userinit(void)
 
   p = allocproc();
   initproc = p;
-  
-  // allocate one user page and copy initcode's instructions
-  // and data into it.
+
+  // 1つのユーザーページを割り当て、initcodeの命令とデータをコピーする。
   uvmfirst(p->pagetable, initcode, sizeof(initcode));
   p->sz = PGSIZE;
 
-  // prepare for the very first "return" from kernel to user.
-  p->trapframe->epc = 0;      // user program counter
-  p->trapframe->sp = PGSIZE;  // user stack pointer
+  // カーネルからユーザーへの初回の「リターン」の準備をする。
+  p->trapframe->epc = 0;      // ユーザープログラムカウンタ
+  p->trapframe->sp = PGSIZE;  // ユーザースタックポインタ
 
   safestrcpy(p->name, "initcode", sizeof(p->name));
   p->cwd = namei("/");
@@ -254,8 +247,8 @@ userinit(void)
   release(&p->lock);
 }
 
-// Grow or shrink user memory by n bytes.
-// Return 0 on success, -1 on failure.
+// ユーザーメモリをnバイトだけ増減させる。
+// 成功時は0を返し、失敗時は-1を返す。
 int
 growproc(int n)
 {
@@ -274,8 +267,8 @@ growproc(int n)
   return 0;
 }
 
-// Create a new process, copying the parent.
-// Sets up child kernel stack to return as if from fork() system call.
+// 新しいプロセスを作成し、親プロセスをコピーする。
+// 子プロセスのカーネルスタックをセットアップして、fork()システムコールから返るようにする。
 int
 fork(void)
 {
@@ -283,12 +276,12 @@ fork(void)
   struct proc *np;
   struct proc *p = myproc();
 
-  // Allocate process.
+  // プロセスを割り当てる。
   if((np = allocproc()) == 0){
     return -1;
   }
 
-  // Copy user memory from parent to child.
+  // 親プロセスから子プロセスへユーザーメモリをコピーする。
   if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
     freeproc(np);
     release(&np->lock);
@@ -296,13 +289,13 @@ fork(void)
   }
   np->sz = p->sz;
 
-  // copy saved user registers.
+  // 保存されたユーザーレジスタをコピーする。
   *(np->trapframe) = *(p->trapframe);
 
-  // Cause fork to return 0 in the child.
+  // 子プロセスではforkは0を返すようにする。
   np->trapframe->a0 = 0;
 
-  // increment reference counts on open file descriptors.
+  // オープンしているファイルディスクリプタの参照カウントを増やす。
   for(i = 0; i < NOFILE; i++)
     if(p->ofile[i])
       np->ofile[i] = filedup(p->ofile[i]);
@@ -325,8 +318,8 @@ fork(void)
   return pid;
 }
 
-// Pass p's abandoned children to init.
-// Caller must hold wait_lock.
+// pの孤立した子プロセスをinitに移譲する。
+// 呼び出し元はwait_lockを保持している必要がある。
 void
 reparent(struct proc *p)
 {
@@ -340,9 +333,8 @@ reparent(struct proc *p)
   }
 }
 
-// Exit the current process.  Does not return.
-// An exited process remains in the zombie state
-// until its parent calls wait().
+// 現在のプロセスを終了させる関数である。戻り値はない。
+// 終了したプロセスは、その親プロセスがwait()を呼び出すまでゾンビ状態で残る。
 void
 exit(int status)
 {
@@ -351,7 +343,7 @@ exit(int status)
   if(p == initproc)
     panic("init exiting");
 
-  // Close all open files.
+  // オープンしているすべてのファイルを閉じる。
   for(int fd = 0; fd < NOFILE; fd++){
     if(p->ofile[fd]){
       struct file *f = p->ofile[fd];
@@ -367,12 +359,12 @@ exit(int status)
 
   acquire(&wait_lock);
 
-  // Give any children to init.
+  // すべての子プロセスをinitに移譲する。
   reparent(p);
 
-  // Parent might be sleeping in wait().
+  // 親プロセスがwait()でスリープしている可能性がある。
   wakeup(p->parent);
-  
+
   acquire(&p->lock);
 
   p->xstate = status;
@@ -380,13 +372,13 @@ exit(int status)
 
   release(&wait_lock);
 
-  // Jump into the scheduler, never to return.
+  // スケジューラにジャンプし、二度と戻らない。
   sched();
   panic("zombie exit");
 }
 
-// Wait for a child process to exit and return its pid.
-// Return -1 if this process has no children.
+// 子プロセスが終了するのを待ち、そのpidを返す。
+// このプロセスに子プロセスがいない場合は-1を返す。
 int
 wait(uint64 addr)
 {
@@ -397,16 +389,16 @@ wait(uint64 addr)
   acquire(&wait_lock);
 
   for(;;){
-    // Scan through table looking for exited children.
+    // テーブルをスキャンして終了した子プロセスを探す。
     havekids = 0;
     for(pp = proc; pp < &proc[NPROC]; pp++){
       if(pp->parent == p){
-        // make sure the child isn't still in exit() or swtch().
+        // 子プロセスがまだexit()またはswtch()中でないことを確認する。
         acquire(&pp->lock);
 
         havekids = 1;
         if(pp->state == ZOMBIE){
-          // Found one.
+          // 見つかった。
           pid = pp->pid;
           if(addr != 0 && copyout(p->pagetable, addr, (char *)&pp->xstate,
                                   sizeof(pp->xstate)) < 0) {
@@ -423,24 +415,23 @@ wait(uint64 addr)
       }
     }
 
-    // No point waiting if we don't have any children.
+    // 子プロセスがいない場合、待機する意味はない。
     if(!havekids || killed(p)){
       release(&wait_lock);
       return -1;
     }
-    
-    // Wait for a child to exit.
-    sleep(p, &wait_lock);  //DOC: wait-sleep
+
+    // 子プロセスが終了するのを待つ。
+    sleep(p, &wait_lock);  // DOC: wait-sleep
   }
 }
 
-// Per-CPU process scheduler.
-// Each CPU calls scheduler() after setting itself up.
-// Scheduler never returns.  It loops, doing:
-//  - choose a process to run.
-//  - swtch to start running that process.
-//  - eventually that process transfers control
-//    via swtch back to the scheduler.
+// CPUごとのプロセススケジューラ。
+// 各CPUは自身を設定した後、scheduler()を呼び出す。
+// スケジューラは戻らない。以下のことを繰り返す:
+//  - 実行するプロセスを選ぶ。
+//  - 選ばれたプロセスを実行する。
+//  - 最終的にプロセスが制御をスケジューラに戻す。
 void
 scheduler(void)
 {
@@ -449,23 +440,22 @@ scheduler(void)
 
   c->proc = 0;
   for(;;){
-    // The most recent process to run may have had interrupts
-    // turned off; enable them to avoid a deadlock if all
-    // processes are waiting.
+    // 最後に実行されたプロセスが割り込みを無効にしている可能性がある。
+    // すべてのプロセスが待機している場合のデッドロックを避けるために有効にする。
     intr_on();
 
     for(p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
       if(p->state == RUNNABLE) {
-        // Switch to chosen process.  It is the process's job
-        // to release its lock and then reacquire it
-        // before jumping back to us.
+        // 選ばれたプロセスにスイッチする。
+        // プロセスの仕事は、ロックを解放し、
+        // 再びここに戻る前にロックを再取得することである。
         p->state = RUNNING;
         c->proc = p;
         swtch(&c->context, &p->context);
 
-        // Process is done running for now.
-        // It should have changed its p->state before coming back.
+        // プロセスの実行が終了。
+        // プロセスがここに戻る前にp->stateを変更する必要がある。
         c->proc = 0;
       }
       release(&p->lock);
@@ -473,13 +463,12 @@ scheduler(void)
   }
 }
 
-// Switch to scheduler.  Must hold only p->lock
-// and have changed proc->state. Saves and restores
-// intena because intena is a property of this
-// kernel thread, not this CPU. It should
-// be proc->intena and proc->noff, but that would
-// break in the few places where a lock is held but
-// there's no process.
+// スケジューラにスイッチする。
+// p->lockのみを保持し、proc->stateを変更している必要がある。
+// intenaを保存および復元する。
+// intenaはこのカーネルスレッドのプロパティであり、このCPUのプロパティではないためである。
+// これをproc->intenaおよびproc->noffにすると、
+// ロックが保持されているがプロセスがない場所で壊れる。
 void
 sched(void)
 {
@@ -500,7 +489,7 @@ sched(void)
   mycpu()->intena = intena;
 }
 
-// Give up the CPU for one scheduling round.
+// 1回のスケジューリングラウンドの間、CPUを放棄する。
 void
 yield(void)
 {
@@ -511,63 +500,59 @@ yield(void)
   release(&p->lock);
 }
 
-// A fork child's very first scheduling by scheduler()
-// will swtch to forkret.
+// フォークされた子プロセスがスケジューラによって初めてスケジュールされる際に
+// forkretにスイッチする。
 void
 forkret(void)
 {
   static int first = 1;
 
-  // Still holding p->lock from scheduler.
+  // スケジューラからのp->lockをまだ保持している。
   release(&myproc()->lock);
 
   if (first) {
-    // File system initialization must be run in the context of a
-    // regular process (e.g., because it calls sleep), and thus cannot
-    // be run from main().
+    // ファイルシステムの初期化は通常のプロセスのコンテキストで実行する必要がある。
+    // （例えば、sleepを呼び出すため）、main()から直接呼び出すことはできない。
     fsinit(ROOTDEV);
 
     first = 0;
-    // ensure other cores see first=0.
+    // 他のコアがfirst=0を認識するようにする。
     __sync_synchronize();
   }
 
   usertrapret();
 }
 
-// Atomically release lock and sleep on chan.
-// Reacquires lock when awakened.
+// ロックをアトミックに解放して、チャネル上でスリープする。
+// 起床時にロックを再取得する。
 void
 sleep(void *chan, struct spinlock *lk)
 {
   struct proc *p = myproc();
-  
-  // Must acquire p->lock in order to
-  // change p->state and then call sched.
-  // Once we hold p->lock, we can be
-  // guaranteed that we won't miss any wakeup
-  // (wakeup locks p->lock),
-  // so it's okay to release lk.
 
-  acquire(&p->lock);  //DOC: sleeplock1
+  // p->stateを変更し、schedを呼び出すためにp->lockを取得する必要がある。
+  // p->lockを保持することで、wakeupの競合を防ぐことができる。
+  // よってlkを解放しても問題ない。
+
+  acquire(&p->lock);  // DOC: sleeplock1
   release(lk);
 
-  // Go to sleep.
+  // スリープ状態に入る。
   p->chan = chan;
   p->state = SLEEPING;
 
   sched();
 
-  // Tidy up.
+  // 後片付け。
   p->chan = 0;
 
-  // Reacquire original lock.
+  // 元のロックを再取得する。
   release(&p->lock);
   acquire(lk);
 }
 
-// Wake up all processes sleeping on chan.
-// Must be called without any p->lock.
+// チャネル上でスリープしているすべてのプロセスをウェイクアップする。
+// p->lockなしで呼び出す必要がある。
 void
 wakeup(void *chan)
 {
@@ -584,9 +569,9 @@ wakeup(void *chan)
   }
 }
 
-// Kill the process with the given pid.
-// The victim won't exit until it tries to return
-// to user space (see usertrap() in trap.c).
+// 指定されたpidのプロセスを終了させる。
+// 被害者はユーザースペースに戻ろうとするまで終了しない
+// （trap.cのusertrap()を参照）。
 int
 kill(int pid)
 {
@@ -597,7 +582,7 @@ kill(int pid)
     if(p->pid == pid){
       p->killed = 1;
       if(p->state == SLEEPING){
-        // Wake process from sleep().
+        // sleep()からプロセスを起こす。
         p->state = RUNNABLE;
       }
       release(&p->lock);
@@ -608,6 +593,7 @@ kill(int pid)
   return -1;
 }
 
+// プロセスを終了状態にする関数である。
 void
 setkilled(struct proc *p)
 {
@@ -616,20 +602,21 @@ setkilled(struct proc *p)
   release(&p->lock);
 }
 
+// プロセスが終了状態かどうかをチェックする関数である。
 int
 killed(struct proc *p)
 {
   int k;
-  
+
   acquire(&p->lock);
   k = p->killed;
   release(&p->lock);
   return k;
 }
 
-// Copy to either a user address, or kernel address,
-// depending on usr_dst.
-// Returns 0 on success, -1 on error.
+// ユーザーアドレスまたはカーネルアドレスにコピーする。
+// usr_dstに応じてどちらにコピーするか決まる。
+// 成功時には0を、エラー時には-1を返す。
 int
 either_copyout(int user_dst, uint64 dst, void *src, uint64 len)
 {
@@ -642,9 +629,9 @@ either_copyout(int user_dst, uint64 dst, void *src, uint64 len)
   }
 }
 
-// Copy from either a user address, or kernel address,
-// depending on usr_src.
-// Returns 0 on success, -1 on error.
+// ユーザーアドレスまたはカーネルアドレスからコピーする。
+// usr_srcに応じてどちらからコピーするか決まる。
+// 成功時には0を、エラー時には-1を返す。
 int
 either_copyin(void *dst, int user_src, uint64 src, uint64 len)
 {
@@ -657,9 +644,9 @@ either_copyin(void *dst, int user_src, uint64 src, uint64 len)
   }
 }
 
-// Print a process listing to console.  For debugging.
-// Runs when user types ^P on console.
-// No lock to avoid wedging a stuck machine further.
+// プロセスのリストをコンソールに出力する。デバッグ用。
+// ユーザーがコンソールで^Pを入力すると実行される。
+// ロックなしで実行して、機械のスタックがさらに固まるのを避ける。
 void
 procdump(void)
 {

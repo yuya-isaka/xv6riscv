@@ -1,12 +1,12 @@
 //
-// Console input and output, to the uart.
-// Reads are line at a time.
-// Implements special input characters:
-//   newline -- end of line
-//   control-h -- backspace
-//   control-u -- kill line
-//   control-d -- end of file
-//   control-p -- print process list
+// UARTへのコンソール入出力である。
+// 読み取りは1行ずつ行われる。
+// 特殊な入力文字を実装する:
+//   改行 -- 行の終わり
+//   control-h -- バックスペース
+//   control-u -- 行の削除
+//   control-d -- ファイルの終わり
+//   control-p -- プロセスリストの表示
 //
 
 #include <stdarg.h>
@@ -26,15 +26,14 @@
 #define C(x)  ((x)-'@')  // Control-x
 
 //
-// send one character to the uart.
-// called by printf(), and to echo input characters,
-// but not from write().
+// 1文字をUARTに送信する関数である。
+// printf()や入力文字のエコーに呼び出されるが、write()からは呼び出されない。
 //
 void
 consputc(int c)
 {
   if(c == BACKSPACE){
-    // if the user typed backspace, overwrite with a space.
+    // ユーザーがバックスペースを入力した場合、スペースで上書きする。
     uartputc_sync('\b'); uartputc_sync(' '); uartputc_sync('\b');
   } else {
     uartputc_sync(c);
@@ -43,17 +42,17 @@ consputc(int c)
 
 struct {
   struct spinlock lock;
-  
-  // input
-#define INPUT_BUF_SIZE 128
+
+  // 入力バッファ
+  #define INPUT_BUF_SIZE 128
   char buf[INPUT_BUF_SIZE];
-  uint r;  // Read index
-  uint w;  // Write index
-  uint e;  // Edit index
+  uint r;  // 読み取りインデックス
+  uint w;  // 書き込みインデックス
+  uint e;  // 編集インデックス
 } cons;
 
 //
-// user write()s to the console go here.
+// ユーザーのwrite()呼び出しがコンソールに対して行われた場合に実行される関数である。
 //
 int
 consolewrite(int user_src, uint64 src, int n)
@@ -71,10 +70,9 @@ consolewrite(int user_src, uint64 src, int n)
 }
 
 //
-// user read()s from the console go here.
-// copy (up to) a whole input line to dst.
-// user_dist indicates whether dst is a user
-// or kernel address.
+// ユーザーのread()呼び出しがコンソールに対して行われた場合に実行される関数である。
+// 入力ライン全体をdstにコピーする。
+// user_dstはdstがユーザーアドレスかカーネルアドレスかを示す。
 //
 int
 consoleread(int user_dst, uint64 dst, int n)
@@ -86,8 +84,7 @@ consoleread(int user_dst, uint64 dst, int n)
   target = n;
   acquire(&cons.lock);
   while(n > 0){
-    // wait until interrupt handler has put some
-    // input into cons.buffer.
+    // 割り込みハンドラがcons.bufferに入力を入れるまで待機する。
     while(cons.r == cons.w){
       if(killed(myproc())){
         release(&cons.lock);
@@ -98,16 +95,15 @@ consoleread(int user_dst, uint64 dst, int n)
 
     c = cons.buf[cons.r++ % INPUT_BUF_SIZE];
 
-    if(c == C('D')){  // end-of-file
+    if(c == C('D')){  // ファイルの終わり
       if(n < target){
-        // Save ^D for next time, to make sure
-        // caller gets a 0-byte result.
+        // 次回のために^Dを保存して、呼び出し元が0バイトの結果を取得できるようにする。
         cons.r--;
       }
       break;
     }
 
-    // copy the input byte to the user-space buffer.
+    // 入力バイトをユーザースペースのバッファにコピーする。
     cbuf = c;
     if(either_copyout(user_dst, dst, &cbuf, 1) == -1)
       break;
@@ -116,8 +112,7 @@ consoleread(int user_dst, uint64 dst, int n)
     --n;
 
     if(c == '\n'){
-      // a whole line has arrived, return to
-      // the user-level read().
+      // 1行全体が到着したので、ユーザーレベルのread()に戻る。
       break;
     }
   }
@@ -127,10 +122,10 @@ consoleread(int user_dst, uint64 dst, int n)
 }
 
 //
-// the console input interrupt handler.
-// uartintr() calls this for input character.
-// do erase/kill processing, append to cons.buf,
-// wake up consoleread() if a whole line has arrived.
+// コンソール入力割り込みハンドラである。
+// uartintr()が入力文字に対してこれを呼び出す。
+// 削除/行削除処理を行い、cons.bufに追加し、
+// 1行全体が到着した場合にconsoleread()を起床させる。
 //
 void
 consoleintr(int c)
@@ -138,18 +133,18 @@ consoleintr(int c)
   acquire(&cons.lock);
 
   switch(c){
-  case C('P'):  // Print process list.
+  case C('P'):  // プロセスリストの表示。
     procdump();
     break;
-  case C('U'):  // Kill line.
+  case C('U'):  // 行の削除。
     while(cons.e != cons.w &&
           cons.buf[(cons.e-1) % INPUT_BUF_SIZE] != '\n'){
       cons.e--;
       consputc(BACKSPACE);
     }
     break;
-  case C('H'): // Backspace
-  case '\x7f': // Delete key
+  case C('H'): // バックスペース
+  case '\x7f': // デリートキー
     if(cons.e != cons.w){
       cons.e--;
       consputc(BACKSPACE);
@@ -159,25 +154,25 @@ consoleintr(int c)
     if(c != 0 && cons.e-cons.r < INPUT_BUF_SIZE){
       c = (c == '\r') ? '\n' : c;
 
-      // echo back to the user.
+      // ユーザーにエコーする。
       consputc(c);
 
-      // store for consumption by consoleread().
+      // consoleread()が消費するために保存する。
       cons.buf[cons.e++ % INPUT_BUF_SIZE] = c;
 
       if(c == '\n' || c == C('D') || cons.e-cons.r == INPUT_BUF_SIZE){
-        // wake up consoleread() if a whole line (or end-of-file)
-        // has arrived.
+        // 1行全体（またはファイルの終わり）が到着した場合にconsoleread()を起床させる。
         cons.w = cons.e;
         wakeup(&cons.r);
       }
     }
     break;
   }
-  
+
   release(&cons.lock);
 }
 
+// コンソールを初期化する関数である。
 void
 consoleinit(void)
 {
@@ -185,8 +180,7 @@ consoleinit(void)
 
   uartinit();
 
-  // connect read and write system calls
-  // to consoleread and consolewrite.
+  // readおよびwriteシステムコールをconsolereadおよびconsolewriteに接続する。
   devsw[CONSOLE].read = consoleread;
   devsw[CONSOLE].write = consolewrite;
 }

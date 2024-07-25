@@ -1,13 +1,13 @@
-#define NPROC        64  // maximum number of processes
-#define NCPU          8  // maximum number of CPUs
-#define NOFILE       16  // open files per process
-#define NFILE       100  // open files per system
-#define NINODE       50  // maximum number of active i-nodes
-#define NDEV         10  // maximum major device number
-#define ROOTDEV       1  // device number of file system root disk
-#define MAXARG       32  // max exec arguments
-#define MAXOPBLOCKS  10  // max # of blocks any FS op writes
-#define LOGSIZE      (MAXOPBLOCKS*3)  // max data blocks in on-disk log
-#define NBUF         (MAXOPBLOCKS*3)  // size of disk block cache
-#define FSSIZE       2000  // size of file system in blocks
-#define MAXPATH      128   // maximum file path name
+#define NPROC        64  // プロセスの最大数
+#define NCPU          8  // CPUの最大数
+#define NOFILE       16  // プロセスごとのオープンファイル数
+#define NFILE       100  // システム全体でのオープンファイル数
+#define NINODE       50  // アクティブなiノードの最大数
+#define NDEV         10  // メジャーデバイス番号の最大数
+#define ROOTDEV       1  // ファイルシステムのルートディスクのデバイス番号
+#define MAXARG       32  // execの最大引数数
+#define MAXOPBLOCKS  10  // 任意のFS操作が書き込む最大ブロック数
+#define LOGSIZE      (MAXOPBLOCKS*3)  // オンディスクログ内の最大データブロック数
+#define NBUF         (MAXOPBLOCKS*3)  // ディスクブロックキャッシュのサイズ
+#define FSSIZE       2000  // ファイルシステムのサイズ（ブロック数）
+#define MAXPATH      128   // ファイルパス名の最大長
