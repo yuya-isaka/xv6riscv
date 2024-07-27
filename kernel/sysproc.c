@@ -6,27 +6,35 @@
 #include "spinlock.h"
 #include "proc.h"
 
+// システムコールexitの実装。
+// プロセスを終了する。
 uint64
 sys_exit(void)
 {
   int n;
   argint(0, &n);
   exit(n);
-  return 0;  // not reached
+  return 0;  // ここには到達しない
 }
 
+// システムコールgetpidの実装。
+// プロセスIDを返す。
 uint64
 sys_getpid(void)
 {
   return myproc()->pid;
 }
 
+// システムコールforkの実装。
+// プロセスを複製する。
 uint64
 sys_fork(void)
 {
   return fork();
 }
 
+// システムコールwaitの実装。
+// 子プロセスの終了を待つ。
 uint64
 sys_wait(void)
 {
@@ -35,6 +43,8 @@ sys_wait(void)
   return wait(p);
 }
 
+// システムコールsbrkの実装。
+// プロセスメモリを増加させる。
 uint64
 sys_sbrk(void)
 {
@@ -48,6 +58,8 @@ sys_sbrk(void)
   return addr;
 }
 
+// システムコールsleepの実装。
+// 指定されたティック数だけスリープする。
 uint64
 sys_sleep(void)
 {
@@ -70,6 +82,8 @@ sys_sleep(void)
   return 0;
 }
 
+// システムコールkillの実装。
+// 指定されたプロセスを終了させる。
 uint64
 sys_kill(void)
 {
@@ -79,8 +93,8 @@ sys_kill(void)
   return kill(pid);
 }
 
-// return how many clock tick interrupts have occurred
-// since start.
+// システムコールuptimeの実装。
+// システムが開始してからのクロックティック数を返す。
 uint64
 sys_uptime(void)
 {

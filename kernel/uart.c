@@ -1,5 +1,5 @@
 //
-// low-level driver routines for 16550a UART.
+// 16550a UARTの低レベルドライバールーチン。
 //
 
 #include "types.h"
@@ -10,79 +10,74 @@
 #include "proc.h"
 #include "defs.h"
 
-// the UART control registers are memory-mapped
-// at address UART0. this macro returns the
-// address of one of the registers.
+// UARTコントロールレジスタはUART0のアドレスにメモリマップされています。
+// このマクロは、特定のレジスタのアドレスを返します。
 #define Reg(reg) ((volatile unsigned char *)(UART0 + reg))
 
-// the UART control registers.
-// some have different meanings for
-// read vs write.
-// see http://byterunner.com/16550.html
-#define RHR 0                 // receive holding register (for input bytes)
-#define THR 0                 // transmit holding register (for output bytes)
-#define IER 1                 // interrupt enable register
+// UARTコントロールレジスタ。
+// 一部のレジスタは読み取りと書き込みで意味が異なります。
+// 詳細は http://byterunner.com/16550.html を参照してください。
+#define RHR 0                 // 受信保持レジスタ（入力バイト用）
+#define THR 0                 // 送信保持レジスタ（出力バイト用）
+#define IER 1                 // 割り込み有効レジスタ
 #define IER_RX_ENABLE (1<<0)
 #define IER_TX_ENABLE (1<<1)
-#define FCR 2                 // FIFO control register
+#define FCR 2                 // FIFOコントロールレジスタ
 #define FCR_FIFO_ENABLE (1<<0)
-#define FCR_FIFO_CLEAR (3<<1) // clear the content of the two FIFOs
-#define ISR 2                 // interrupt status register
-#define LCR 3                 // line control register
+#define FCR_FIFO_CLEAR (3<<1) // 2つのFIFOの内容をクリア
+#define ISR 2                 // 割り込み状態レジスタ
+#define LCR 3                 // ラインコントロールレジスタ
 #define LCR_EIGHT_BITS (3<<0)
-#define LCR_BAUD_LATCH (1<<7) // special mode to set baud rate
-#define LSR 5                 // line status register
-#define LSR_RX_READY (1<<0)   // input is waiting to be read from RHR
-#define LSR_TX_IDLE (1<<5)    // THR can accept another character to send
+#define LCR_BAUD_LATCH (1<<7) // ボーレート設定の特別モード
+#define LSR 5                 // ライン状態レジスタ
+#define LSR_RX_READY (1<<0)   // 入力データがRHRに準備完了
+#define LSR_TX_IDLE (1<<5)    // THRが次の送信バイトを受け入れる準備ができている
 
 #define ReadReg(reg) (*(Reg(reg)))
 #define WriteReg(reg, v) (*(Reg(reg)) = (v))
 
-// the transmit output buffer.
+// 送信用バッファ
 struct spinlock uart_tx_lock;
 #define UART_TX_BUF_SIZE 32
 char uart_tx_buf[UART_TX_BUF_SIZE];
-uint64 uart_tx_w; // write next to uart_tx_buf[uart_tx_w % UART_TX_BUF_SIZE]
-uint64 uart_tx_r; // read next from uart_tx_buf[uart_tx_r % UART_TX_BUF_SIZE]
+uint64 uart_tx_w; // 次に書き込むバイトの位置
+uint64 uart_tx_r; // 次に読み取るバイトの位置
 
-extern volatile int panicked; // from printf.c
+extern volatile int panicked; // printf.cから
 
 void uartstart();
 
+// UARTの初期化
 void
 uartinit(void)
 {
-  // disable interrupts.
+  // 割り込みを無効にする
   WriteReg(IER, 0x00);
 
-  // special mode to set baud rate.
+  // ボーレート設定モード
   WriteReg(LCR, LCR_BAUD_LATCH);
 
-  // LSB for baud rate of 38.4K.
+  // ボーレート38400のLSB
   WriteReg(0, 0x03);
 
-  // MSB for baud rate of 38.4K.
+  // ボーレート38400のMSB
   WriteReg(1, 0x00);
 
-  // leave set-baud mode,
-  // and set word length to 8 bits, no parity.
+  // ボーレート設定モードを解除し、ワード長を8ビット、パリティなしに設定
   WriteReg(LCR, LCR_EIGHT_BITS);
 
-  // reset and enable FIFOs.
+  // FIFOをリセットして有効にする
   WriteReg(FCR, FCR_FIFO_ENABLE | FCR_FIFO_CLEAR);
 
-  // enable transmit and receive interrupts.
+  // 送信と受信の割り込みを有効にする
   WriteReg(IER, IER_TX_ENABLE | IER_RX_ENABLE);
 
   initlock(&uart_tx_lock, "uart");
 }
 
-// add a character to the output buffer and tell the
-// UART to start sending if it isn't already.
-// blocks if the output buffer is full.
-// because it may block, it can't be called
-// from interrupts; it's only suitable for use
-// by write().
+// 文字を出力バッファに追加し、UARTが送信中でなければ送信を開始する。
+// 出力バッファが満杯の場合はブロックする。
+// ブロックする可能性があるため、割り込みから呼び出すことはできず、write()によってのみ使用される。
 void
 uartputc(int c)
 {
@@ -93,8 +88,8 @@ uartputc(int c)
       ;
   }
   while(uart_tx_w == uart_tx_r + UART_TX_BUF_SIZE){
-    // buffer is full.
-    // wait for uartstart() to open up space in the buffer.
+    // バッファが満杯
+    // uartstart()がバッファの空きを作るのを待つ
     sleep(&uart_tx_r, &uart_tx_lock);
   }
   uart_tx_buf[uart_tx_w % UART_TX_BUF_SIZE] = c;
@@ -103,11 +98,9 @@ uartputc(int c)
   release(&uart_tx_lock);
 }
 
-
-// alternate version of uartputc() that doesn't 
-// use interrupts, for use by kernel printf() and
-// to echo characters. it spins waiting for the uart's
-// output register to be empty.
+// 割り込みを使用しないuartputc()の別バージョン。
+// カーネルのprintf()や文字のエコーに使用される。
+// UARTの出力レジスタが空になるのを待つ。
 void
 uartputc_sync(int c)
 {
@@ -118,7 +111,7 @@ uartputc_sync(int c)
       ;
   }
 
-  // wait for Transmit Holding Empty to be set in LSR.
+  // LSRのTransmit Holding Emptyがセットされるのを待つ
   while((ReadReg(LSR) & LSR_TX_IDLE) == 0)
     ;
   WriteReg(THR, c);
@@ -126,56 +119,53 @@ uartputc_sync(int c)
   pop_off();
 }
 
-// if the UART is idle, and a character is waiting
-// in the transmit buffer, send it.
-// caller must hold uart_tx_lock.
-// called from both the top- and bottom-half.
+// UARTがアイドル状態で、送信バッファに文字がある場合は送信する。
+// 呼び出し元はuart_tx_lockを保持している必要がある。
+// トップハーフとボトムハーフの両方から呼び出される。
 void
 uartstart()
 {
   while(1){
     if(uart_tx_w == uart_tx_r){
-      // transmit buffer is empty.
+      // 送信バッファが空
       return;
     }
-    
+
     if((ReadReg(LSR) & LSR_TX_IDLE) == 0){
-      // the UART transmit holding register is full,
-      // so we cannot give it another byte.
-      // it will interrupt when it's ready for a new byte.
+      // UART送信保持レジスタが満杯なので、次のバイトを送信できない。
+      // 準備ができたら割り込みが発生する。
       return;
     }
-    
+
     int c = uart_tx_buf[uart_tx_r % UART_TX_BUF_SIZE];
     uart_tx_r += 1;
-    
-    // maybe uartputc() is waiting for space in the buffer.
+
+    // バッファの空きを待っているかもしれないuartputc()を起こす
     wakeup(&uart_tx_r);
-    
+
     WriteReg(THR, c);
   }
 }
 
-// read one input character from the UART.
-// return -1 if none is waiting.
+// UARTから1文字の入力を読み取る。
+// 入力待ちがない場合は-1を返す。
 int
 uartgetc(void)
 {
   if(ReadReg(LSR) & 0x01){
-    // input data is ready.
+    // 入力データが準備完了
     return ReadReg(RHR);
   } else {
     return -1;
   }
 }
 
-// handle a uart interrupt, raised because input has
-// arrived, or the uart is ready for more output, or
-// both. called from devintr().
+// 入力が到着した、またはUARTが新しい出力を受け付ける準備ができたために発生するUART割り込みを処理する。
+// devintr()から呼び出される。
 void
 uartintr(void)
 {
-  // read and process incoming characters.
+  // 受信文字を読み取り処理する。
   while(1){
     int c = uartgetc();
     if(c == -1)
@@ -183,7 +173,7 @@ uartintr(void)
     consoleintr(c);
   }
 
-  // send buffered characters.
+  // バッファされた文字を送信する。
   acquire(&uart_tx_lock);
   uartstart();
   release(&uart_tx_lock);

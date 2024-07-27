@@ -1,13 +1,11 @@
         #
-        # low-level code to handle traps from user space into
-        # the kernel, and returns from kernel to user.
+        # ユーザ空間からカーネルへのトラップを処理し、
+        # カーネルからユーザ空間に戻るための低レベルコード。
         #
-        # the kernel maps the page holding this code
-        # at the same virtual address (TRAMPOLINE)
-        # in user and kernel space so that it continues
-        # to work when it switches page tables.
-        # kernel.ld causes this code to start at 
-        # a page boundary.
+        # カーネルは、このコードを含むページを
+        # ユーザおよびカーネル空間で同じ仮想アドレス (TRAMPOLINE) にマッピングし、
+        # ページテーブルを切り替えたときでも機能し続けるようにしています。
+        # kernel.ld はこのコードがページ境界から始まるように設定します。
         #
 
 #include "riscv.h"
@@ -19,24 +17,22 @@
 trampoline:
 .align 4
 .globl uservec
-uservec:    
+uservec:
 	#
-        # trap.c sets stvec to point here, so
-        # traps from user space start here,
-        # in supervisor mode, but with a
-        # user page table.
+        # trap.c は stvec をここに設定し、
+        # ユーザ空間からのトラップがここから始まります。
+        # スーパーバイザモードで、ただしユーザのページテーブルを使用します。
         #
 
-        # save user a0 in sscratch so
-        # a0 can be used to get at TRAPFRAME.
+        # ユーザの a0 を sscratch に保存して、
+        # a0 を TRAPFRAME にアクセスするために使用できるようにします。
         csrw sscratch, a0
 
-        # each process has a separate p->trapframe memory area,
-        # but it's mapped to the same virtual address
-        # (TRAPFRAME) in every process's user page table.
+        # 各プロセスは p->trapframe メモリ領域を持ちますが、
+        # それはすべてのプロセスのユーザページテーブルで同じ仮想アドレス (TRAPFRAME) にマッピングされています。
         li a0, TRAPFRAME
-        
-        # save the user registers in TRAPFRAME
+
+        # ユーザレジスタを TRAPFRAME に保存します。
         sd ra, 40(a0)
         sd sp, 48(a0)
         sd gp, 56(a0)
@@ -68,50 +64,49 @@ uservec:
         sd t5, 272(a0)
         sd t6, 280(a0)
 
-	# save the user a0 in p->trapframe->a0
+	# ユーザの a0 を p->trapframe->a0 に保存します。
         csrr t0, sscratch
         sd t0, 112(a0)
 
-        # initialize kernel stack pointer, from p->trapframe->kernel_sp
+        # p->trapframe->kernel_sp からカーネルスタックポインタを初期化します。
         ld sp, 8(a0)
 
-        # make tp hold the current hartid, from p->trapframe->kernel_hartid
+        # p->trapframe->kernel_hartid から tp に現在の hartid を設定します。
         ld tp, 32(a0)
 
-        # load the address of usertrap(), from p->trapframe->kernel_trap
+        # p->trapframe->kernel_trap から usertrap() のアドレスを読み込みます。
         ld t0, 16(a0)
 
-        # fetch the kernel page table address, from p->trapframe->kernel_satp.
+        # p->trapframe->kernel_satp からカーネルページテーブルアドレスを取得します。
         ld t1, 0(a0)
 
-        # wait for any previous memory operations to complete, so that
-        # they use the user page table.
+        # 前のメモリ操作が完了するのを待ちます。
         sfence.vma zero, zero
 
-        # install the kernel page table.
+        # カーネルページテーブルをインストールします。
         csrw satp, t1
 
-        # flush now-stale user entries from the TLB.
+        # 古いユーザエントリを TLB からフラッシュします。
         sfence.vma zero, zero
 
-        # jump to usertrap(), which does not return
+        # usertrap() にジャンプし、戻りません。
         jr t0
 
 .globl userret
 userret:
         # userret(pagetable)
-        # called by usertrapret() in trap.c to
-        # switch from kernel to user.
-        # a0: user page table, for satp.
+        # trap.c の usertrapret() によって呼び出され、
+        # カーネルからユーザに切り替えます。
+        # a0: satp 用のユーザページテーブル。
 
-        # switch to the user page table.
+        # ユーザページテーブルに切り替えます。
         sfence.vma zero, zero
         csrw satp, a0
         sfence.vma zero, zero
 
         li a0, TRAPFRAME
 
-        # restore all but a0 from TRAPFRAME
+        # a0 以外のすべてを TRAPFRAME から復元します。
         ld ra, 40(a0)
         ld sp, 48(a0)
         ld gp, 56(a0)
@@ -143,9 +138,9 @@ userret:
         ld t5, 272(a0)
         ld t6, 280(a0)
 
-	# restore user a0
+	# ユーザの a0 を復元します。
         ld a0, 112(a0)
-        
-        # return to user mode and user pc.
-        # usertrapret() set up sstatus and sepc.
+
+        # ユーザモードとユーザ PC に戻ります。
+        # usertrapret() が sstatus と sepc を設定しました。
         sret
