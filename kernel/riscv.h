@@ -1,5 +1,95 @@
 #ifndef __ASSEMBLER__
 
+/*
+  RISC-VレジスタおよびCSRsの解説
+
+  1. mhartidレジスタ:
+     現在のハート（コア）のIDを保持するレジスタ。マルチコアシステムで有用。
+
+  2. mstatusレジスタ:
+     Machineモードのステータスレジスタ。以下のビットフィールドを含む:
+     - MPP (Machine Previous Privilege): 前の特権モードを示す。
+     - MIE (Machine-mode Interrupt Enable): Machineモードの割り込み有効化。
+
+  3. mepcレジスタ:
+     例外が発生したときに保存されるプログラムカウンタ。例外ハンドラからのリターン時に使用。
+
+  4. sstatusレジスタ:
+     Supervisorモードのステータスレジスタ。以下のビットフィールドを含む:
+     - SPP (Supervisor Previous Privilege): 前の特権モードを示す。
+     - SPIE (Supervisor Previous Interrupt Enable): Supervisorモードの前の割り込み有効化状態。
+     - SIE (Supervisor Interrupt Enable): Supervisorモードの割り込み有効化。
+
+  5. sipレジスタ:
+     Supervisorモードの割り込み保留レジスタ。割り込みが発生したことを示す。
+
+  6. sieレジスタ:
+     Supervisorモードの割り込み有効化レジスタ。以下のビットフィールドを含む:
+     - SEIE (Supervisor External Interrupt Enable): 外部割り込みの有効化。
+     - STIE (Supervisor Timer Interrupt Enable): タイマー割り込みの有効化。
+     - SSIE (Supervisor Software Interrupt Enable): ソフトウェア割り込みの有効化。
+
+  7. mieレジスタ:
+     Machineモードの割り込み有効化レジスタ。以下のビットフィールドを含む:
+     - STIE (Supervisor Timer Interrupt Enable): Supervisorモードのタイマー割り込みの有効化。
+
+  8. sepcレジスタ:
+     Supervisorモードの例外プログラムカウンタ。例外が発生したときに保存される。
+
+  9. medelegレジスタ:
+     Machineモードの例外委譲レジスタ。特定の例外をSupervisorモードに委譲するために使用。
+
+  10. midelegレジスタ:
+      Machineモードの割り込み委譲レジスタ。特定の割り込みをSupervisorモードに委譲するために使用。
+
+  11. stvecレジスタ:
+      Supervisorモードのトラップベクタベースアドレスレジスタ。トラップハンドラのアドレスを設定。
+
+  12. stimecmpレジスタ:
+      Supervisorモードのタイマー比較レジスタ。タイマー割り込みの発生時間を設定。
+
+  13. menvcfgレジスタ:
+      Machineモードの環境設定レジスタ。環境設定のために使用。
+
+  14. pmpcfg0レジスタ:
+      物理メモリ保護（PMP）の設定レジスタ。メモリ保護の設定を行う。
+
+  15. pmpaddr0レジスタ:
+      物理メモリ保護（PMP）のアドレスレジスタ。メモリ保護の範囲を設定。
+
+  16. satpレジスタ:
+      Supervisorアドレストランスレーションおよびプロテクションレジスタ。ページテーブルのベースアドレスを設定。
+
+  17. scauseレジスタ:
+      Supervisorモードのトラップ原因レジスタ。トラップの原因を示す。
+
+  18. stvalレジスタ:
+      Supervisorモードのトラップ値レジスタ。トラップ発生時の関連する値を保持。
+
+  19. mcounterenレジスタ:
+      Machineモードのカウンター有効化レジスタ。特定のカウンターを有効化するために使用。
+
+  20. timeレジスタ:
+      マシンモードのサイクルカウンタ。現在のタイマー値を示す。
+
+  21. sfence.vma命令:
+      TLBのフラッシュを行う命令。仮想メモリの更新後に使用。
+
+  その他のユーティリティレジスタ:
+  - sp: スタックポインタの読み書き。
+  - tp: スレッドポインタの読み書き。
+  - ra: リターンアドレスの読み書き。
+
+  PTEおよびページテーブル:
+  - ページテーブルエントリ（PTE）のフラグおよびアドレス変換マクロ。
+  - 仮想アドレスからページテーブルインデックスを抽出するマクロ。
+
+  その他の定数:
+  - PGSIZE: ページサイズ（4096バイト）
+  - PGSHIFT: ページ内オフセットビット数（12ビット）
+  - PGROUNDUP, PGROUNDDOWN: ページ境界に切り上げ/切り下げするマクロ。
+*/
+
 // 現在のハート（コア）を取得
 static inline uint64
 r_mhartid()
@@ -215,12 +305,20 @@ w_menvcfg(uint64 x)
 }
 
 // Physical Memory Protection (PMP) レジスタの書き込み
+// 物理メモリ保護（PMP）の設定レジスタ。メモリ保護の設定を行う。
+// RV32とRV64では構成が異なる
+// PMPは現在の構成では16種類設定できる
+// pmpcfgのLビットは、Lockビットの意味を持っている。このビットを設定するとM-ModeでもProtection判定が適用され、R/W/Xのビット設定もM-Modeでもチェックされるようになる。
+// Lビット : Lockビット
+// Aビット : アドレスマッチングのためのモード
+// X/W/R ビット : メモリアクセスのためのフィールド
 static inline void
 w_pmpcfg0(uint64 x)
 {
   asm volatile("csrw pmpcfg0, %0" : : "r" (x));
 }
 
+// 物理メモリ保護（PMP）のアドレスレジスタ。メモリ保護の範囲を設定。
 static inline void
 w_pmpaddr0(uint64 x)
 {
