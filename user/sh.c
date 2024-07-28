@@ -1,60 +1,66 @@
-// Shell.
+// シェルプログラム
 
 #include "kernel/types.h"
 #include "user/user.h"
 #include "kernel/fcntl.h"
 
-// Parsed command representation
-#define EXEC  1
-#define REDIR 2
-#define PIPE  3
-#define LIST  4
-#define BACK  5
+// パースされたコマンドの表現
+#define EXEC  1  // 単純なコマンドの実行
+#define REDIR 2  // 入出力リダイレクト
+#define PIPE  3  // パイプ処理
+#define LIST  4  // コマンドリスト
+#define BACK  5  // バックグラウンド実行
 
-#define MAXARGS 10
+#define MAXARGS 10  // 最大引数数
 
+// 基本コマンド構造体
 struct cmd {
-  int type;
+  int type;  // コマンドタイプ
 };
 
+// 実行コマンド構造体
 struct execcmd {
-  int type;
-  char *argv[MAXARGS];
-  char *eargv[MAXARGS];
+  int type;  // コマンドタイプ（EXEC）
+  char *argv[MAXARGS];  // 引数配列
+  char *eargv[MAXARGS];  // 引数の終端
 };
 
+// リダイレクトコマンド構造体
 struct redircmd {
-  int type;
-  struct cmd *cmd;
-  char *file;
-  char *efile;
-  int mode;
-  int fd;
+  int type;  // コマンドタイプ（REDIR）
+  struct cmd *cmd;  // 実行コマンド
+  char *file;  // ファイル名
+  char *efile;  // ファイル名の終端
+  int mode;  // リダイレクトモード
+  int fd;  // ファイルディスクリプタ
 };
 
+// パイプコマンド構造体
 struct pipecmd {
-  int type;
-  struct cmd *left;
-  struct cmd *right;
+  int type;  // コマンドタイプ（PIPE）
+  struct cmd *left;  // 左側のコマンド
+  struct cmd *right;  // 右側のコマンド
 };
 
+// コマンドリスト構造体
 struct listcmd {
-  int type;
-  struct cmd *left;
-  struct cmd *right;
+  int type;  // コマンドタイプ（LIST）
+  struct cmd *left;  // 左側のコマンド
+  struct cmd *right;  // 右側のコマンド
 };
 
+// バックグラウンドコマンド構造体
 struct backcmd {
-  int type;
-  struct cmd *cmd;
+  int type;  // コマンドタイプ（BACK）
+  struct cmd *cmd;  // 実行コマンド
 };
 
-int fork1(void);  // Fork but panics on failure.
+int fork1(void);  // フォーク失敗時にパニック
 void panic(char*);
 struct cmd *parsecmd(char*);
-void runcmd(struct cmd*) __attribute__((noreturn));
+void runcmd(struct cmd*) __attribute__((noreturn));  // 決して戻らない関数
 
-// Execute cmd.  Never returns.
+// コマンドを実行する関数。決して戻らない。
 void
 runcmd(struct cmd *cmd)
 {
@@ -131,6 +137,7 @@ runcmd(struct cmd *cmd)
   exit(0);
 }
 
+// コマンドを取得する関数
 int
 getcmd(char *buf, int nbuf)
 {
@@ -142,13 +149,15 @@ getcmd(char *buf, int nbuf)
   return 0;
 }
 
+// メイン関数
 int
 main(void)
 {
   static char buf[100];
   int fd;
 
-  // Ensure that three file descriptors are open.
+  // ファイルディスクリプタが3つ開かれていることを確認する
+  // “console”というファイルを読み書きモードで開く (コンソール（端末）デバイスに対応している)
   while((fd = open("console", O_RDWR)) >= 0){
     if(fd >= 3){
       close(fd);
@@ -156,11 +165,11 @@ main(void)
     }
   }
 
-  // Read and run input commands.
+  // 入力コマンドを読み取り実行する
   while(getcmd(buf, sizeof(buf)) >= 0){
     if(buf[0] == 'c' && buf[1] == 'd' && buf[2] == ' '){
-      // Chdir must be called by the parent, not the child.
-      buf[strlen(buf)-1] = 0;  // chop \n
+      // Chdirは子プロセスではなく親プロセスが呼び出す必要がある
+      buf[strlen(buf)-1] = 0;  // \nを取り除く
       if(chdir(buf+3) < 0)
         fprintf(2, "cannot cd %s\n", buf+3);
       continue;
@@ -172,6 +181,7 @@ main(void)
   exit(0);
 }
 
+// エラーメッセージを表示して終了する関数
 void
 panic(char *s)
 {
@@ -179,6 +189,7 @@ panic(char *s)
   exit(1);
 }
 
+// フォークして、失敗時にはパニックする関数
 int
 fork1(void)
 {
@@ -191,8 +202,9 @@ fork1(void)
 }
 
 //PAGEBREAK!
-// Constructors
+// コンストラクタ
 
+// 実行コマンド構造体を生成する関数
 struct cmd*
 execcmd(void)
 {
@@ -204,6 +216,7 @@ execcmd(void)
   return (struct cmd*)cmd;
 }
 
+// リダイレクトコマンド構造体を生成する関数
 struct cmd*
 redircmd(struct cmd *subcmd, char *file, char *efile, int mode, int fd)
 {
@@ -220,6 +233,7 @@ redircmd(struct cmd *subcmd, char *file, char *efile, int mode, int fd)
   return (struct cmd*)cmd;
 }
 
+// パイプコマンド構造体を生成する関数
 struct cmd*
 pipecmd(struct cmd *left, struct cmd *right)
 {
@@ -233,6 +247,7 @@ pipecmd(struct cmd *left, struct cmd *right)
   return (struct cmd*)cmd;
 }
 
+// コマンドリスト構造体を生成する関数
 struct cmd*
 listcmd(struct cmd *left, struct cmd *right)
 {
@@ -246,6 +261,7 @@ listcmd(struct cmd *left, struct cmd *right)
   return (struct cmd*)cmd;
 }
 
+// バックグラウンドコマンド構造体を生成する関数
 struct cmd*
 backcmd(struct cmd *subcmd)
 {
@@ -257,12 +273,14 @@ backcmd(struct cmd *subcmd)
   cmd->cmd = subcmd;
   return (struct cmd*)cmd;
 }
+
 //PAGEBREAK!
-// Parsing
+// パース関数
 
 char whitespace[] = " \t\r\n\v";
 char symbols[] = "<|>&;()";
 
+// トークンを取得する関数
 int
 gettoken(char **ps, char *es, char **q, char **eq)
 {
@@ -308,6 +326,7 @@ gettoken(char **ps, char *es, char **q, char **eq)
   return ret;
 }
 
+// トークンを覗き見る関数
 int
 peek(char **ps, char *es, char *toks)
 {
@@ -325,6 +344,7 @@ struct cmd *parsepipe(char**, char*);
 struct cmd *parseexec(char**, char*);
 struct cmd *nulterminate(struct cmd*);
 
+// コマンド文字列をパースする関数
 struct cmd*
 parsecmd(char *s)
 {
@@ -342,6 +362,7 @@ parsecmd(char *s)
   return cmd;
 }
 
+// コマンドラインをパースする関数
 struct cmd*
 parseline(char **ps, char *es)
 {
@@ -359,6 +380,7 @@ parseline(char **ps, char *es)
   return cmd;
 }
 
+// パイプコマンドをパースする関数
 struct cmd*
 parsepipe(char **ps, char *es)
 {
@@ -372,6 +394,7 @@ parsepipe(char **ps, char *es)
   return cmd;
 }
 
+// リダイレクトをパースする関数
 struct cmd*
 parseredirs(struct cmd *cmd, char **ps, char *es)
 {
@@ -397,6 +420,7 @@ parseredirs(struct cmd *cmd, char **ps, char *es)
   return cmd;
 }
 
+// ブロックコマンドをパースする関数
 struct cmd*
 parseblock(char **ps, char *es)
 {
@@ -413,6 +437,7 @@ parseblock(char **ps, char *es)
   return cmd;
 }
 
+// 実行コマンドをパースする関数
 struct cmd*
 parseexec(char **ps, char *es)
 {
@@ -447,6 +472,7 @@ parseexec(char **ps, char *es)
 }
 
 // NUL-terminate all the counted strings.
+// すべてのカウントされた文字列をNULで終端する関数
 struct cmd*
 nulterminate(struct cmd *cmd)
 {

@@ -108,8 +108,9 @@ _%: %.o $(ULIB)
 	$(OBJDUMP) -t $@ | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $*.sym
 
 # usys.Sの生成ルール
-$U/usys.S : $U/usys.pl
-	perl $U/usys.pl > $U/usys.S
+# $U/usys.Sファイルが$U/usys.pyに依存 ($U/usys.Sファイルを生成するためには、$U/usys.pyファイルが必要)
+$U/usys.S : $U/usys.py
+	python3 $U/usys.py > $U/usys.S
 
 # usys.oの生成ルール
 $U/usys.o : $U/usys.S

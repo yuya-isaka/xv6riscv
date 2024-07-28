@@ -40,6 +40,7 @@ usertrap(void)
     panic("usertrap: not from user mode");
 
   // 割り込みと例外をkerneltrap()に送るために設定する。
+  // kernelvec関数に飛ぶ
   w_stvec((uint64)kernelvec);
 
   struct proc *p = myproc();
@@ -87,6 +88,7 @@ usertrapret(void)
   intr_off();
 
   // システムコール、割り込み、例外をtrampoline.S内のuservecに送るよう設定する。
+  // uservec関数に飛ぶ。
   uint64 trampoline_uservec = TRAMPOLINE + (uservec - trampoline);
   w_stvec(trampoline_uservec);
 
