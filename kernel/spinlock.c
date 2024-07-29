@@ -85,26 +85,36 @@ holding(struct spinlock *lk)
 // 2つのpush_off()を行うには2つのpop_off()が必要である。
 // また、最初に割り込みが無効の場合、push_off、pop_offはそれを維持する。
 
+// 割り込みの状態を制御し、特定のコードが実行中に割り込みが発生しないようにするための関数
+// 割り込みのネストされた無効化/有効化を管理するために設計
+
+// push_offは割り込みを無効化し、その状態を保存
+// 複数回呼び出された場合でも対応できるように、無効化の回数をカウント
 void
 push_off(void)
 {
-  int old = intr_get();
+  int old = intr_get(); // 現在の割り込み状態を保存
 
-  intr_off();
-  if(mycpu()->noff == 0)
-    mycpu()->intena = old;
-  mycpu()->noff += 1;
+  intr_off(); // 割り込みを無効化
+
+  // 無効化する前、割り込みが有効だった場合
+  if(mycpu()->noff == 0) // 現在のCPUの割り込みが無効化された回数が0の場合
+    mycpu()->warikomi = old; // 以前の割り込み状態を保存
+
+  mycpu()->noff += 1; // 割り込みが無効化された回数をインクリメント
 }
 
+// pop_offは割り込みが無効化されていることを確認し、その状態をもとに戻す
+// 複数回無効化されている場合は、カウントを減らし、最後に無効化が解除されるタイミングで割り込みを有効化
 void
 pop_off(void)
 {
   struct cpu *c = mycpu();
-  if(intr_get())
-    panic("pop_off - interruptible");
-  if(c->noff < 1)
-    panic("pop_off");
-  c->noff -= 1;
-  if(c->noff == 0 && c->intena)
-    intr_on();
+  if(intr_get()) // 割り込みが有効な場合
+    panic("pop_off - interruptible"); // パニックを起こす
+  if(c->noff < 1) // 割り込みが無効化された回数が1未満の場合
+    panic("pop_off"); // パニックを起こす
+  c->noff -= 1; // 割り込みが無効化された回数をデクリメント
+  if(c->noff == 0 && c->warikomi) // noffが0になり、以前の割り込み状態が有効な場合
+    intr_on(); // 割り込みを有効化
 }

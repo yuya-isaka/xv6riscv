@@ -22,8 +22,8 @@ struct context {
 struct cpu {
   struct proc *proc;          // このCPU上で動作しているプロセス、またはnull
   struct context context;     // スケジューラに入るためのswtch()用のコンテキスト
-  int noff;                   // push_off()のネスト深度
-  int intena;                 // push_off()前の割り込みの有効状態
+  int noff;                   // push_off()のネスト深度=割り込みが無効化された回数
+  int warikomi;               // push_off()前の割り込みの有効状態
 };
 
 extern struct cpu cpus[NCPU]; // 全CPUの状態を保持する配列

@@ -465,14 +465,14 @@ scheduler(void)
 
 // スケジューラにスイッチする。
 // p->lockのみを保持し、proc->stateを変更している必要がある。
-// intenaを保存および復元する。
-// intenaはこのカーネルスレッドのプロパティであり、このCPUのプロパティではないためである。
-// これをproc->intenaおよびproc->noffにすると、
+// warikomiを保存および復元する。
+// warikomiはこのカーネルスレッドのプロパティであり、このCPUのプロパティではないためである。
+// これをproc->warikomiおよびproc->noffにすると、
 // ロックが保持されているがプロセスがない場所で壊れる。
 void
 sched(void)
 {
-  int intena;
+  int warikomi;
   struct proc *p = myproc();
 
   if(!holding(&p->lock))
@@ -484,9 +484,9 @@ sched(void)
   if(intr_get())
     panic("sched interruptible");
 
-  intena = mycpu()->intena;
+  warikomi = mycpu()->warikomi;
   swtch(&p->context, &mycpu()->context);
-  mycpu()->intena = intena;
+  mycpu()->warikomi = warikomi;
 }
 
 // 1回のスケジューリングラウンドの間、CPUを放棄する。
